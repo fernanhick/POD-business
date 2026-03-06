@@ -32,13 +32,22 @@ def inspect_design(filepath):
     Returns dict with pass/fail, size, contrast, and any issues found.
     """
     issues = []
-    img = Image.open(filepath).convert("RGB")
+    img = Image.open(filepath)
     w, h = img.size
 
     if w < MIN_WIDTH or h < MIN_HEIGHT:
         issues.append(f"Too small: {w}x{h}px (need {MIN_WIDTH}x{MIN_HEIGHT})")
 
-    stat = ImageStat.Stat(img)
+    # For RGBA images, use the alpha channel as mask so transparent
+    # pixels (removed background) don't skew the contrast stats.
+    rgb = img.convert("RGB")
+    if img.mode == "RGBA":
+        alpha = img.split()[3]
+        mask = alpha.point(lambda a: 255 if a > 128 else 0)
+        stat = ImageStat.Stat(rgb, mask=mask)
+    else:
+        stat = ImageStat.Stat(rgb)
+
     avg_std = sum(stat.stddev) / len(stat.stddev)
     if avg_std < MIN_CONTRAST:
         issues.append(f"Low contrast: stddev={avg_std:.1f} (need {MIN_CONTRAST})")

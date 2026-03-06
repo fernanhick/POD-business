@@ -109,6 +109,7 @@ class ApprovalRequest(BaseModel):
 class PrintifyUploadRequest(BaseModel):
     designType: Literal["general", "sneaker"]
     filename: str
+    productType: Literal["tshirt", "hoodie"] = "tshirt"
     draft: bool = False
 
 
@@ -933,10 +934,11 @@ def printify_upload(payload: PrintifyUploadRequest) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="Design not found in approved folder. Only approved designs can be uploaded.")
 
     front_code = cfg["code"]
-    printify_cfg = PRINTIFY_CONFIG[front_code]
+    front_cfg = PRINTIFY_CONFIG[front_code]
+    pcfg = front_cfg["products"][payload.productType]
     base_name = filepath.stem.replace("_", " ").title()
-    title = printify_cfg["title_template"].format(name=base_name)
-    description = printify_cfg["description_template"]
+    title = pcfg["title_template"].format(name=base_name)
+    description = pcfg["description_template"]
 
     try:
         image_id = printify_upload_image(str(filepath))
@@ -944,7 +946,7 @@ def printify_upload(payload: PrintifyUploadRequest) -> dict[str, Any]:
         raise HTTPException(status_code=502, detail=f"Printify image upload failed: {exc}")
 
     try:
-        product_id = printify_create_product(image_id, title, description, printify_cfg, design_name=base_name)
+        product_id = printify_create_product(image_id, title, description, pcfg, design_name=base_name)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Printify product creation failed: {exc}")
 

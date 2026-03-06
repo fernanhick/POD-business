@@ -45,104 +45,168 @@ SP = os.path.join(WORKSPACE, "spreadsheets")
 # ── Per-front product configuration ──────────────────────────────
 # Update blueprint_id, provider_id, variant_ids after querying the
 # Printify catalog API (see docs at bottom of this file).
+# ── Shared product configs (same garment for both fronts) ────────
+_TSHIRT_PRODUCT = {
+    "blueprint_id": 5,        # Unisex Cotton Crew Tee (Next Level 3600)
+    "provider_id":  99,       # Printify Choice
+    "variants": [
+        # Solid Black: S–5XL
+        {"id": 17427, "size": "S"},
+        {"id": 17428, "size": "M"},
+        {"id": 17429, "size": "L"},
+        {"id": 17430, "size": "XL"},
+        {"id": 17431, "size": "2XL"},
+        {"id": 17432, "size": "3XL"},
+        {"id": 17433, "size": "4XL"},
+        {"id": 101781, "size": "5XL"},
+        # Solid White: S–5XL
+        {"id": 17643, "size": "S"},
+        {"id": 17644, "size": "M"},
+        {"id": 17645, "size": "L"},
+        {"id": 17646, "size": "XL"},
+        {"id": 17647, "size": "2XL"},
+        {"id": 17648, "size": "3XL"},
+        {"id": 17649, "size": "4XL"},
+        {"id": 101810, "size": "5XL"},
+    ],
+    "base_cost_cents": 1163,
+    "oversize_costs": {
+        "2XL": 1409, "3XL": 1613, "4XL": 1796, "5XL": 1930,
+    },
+    "shipping_cents": 399,
+}
+
+_HOODIE_PRODUCT = {
+    "blueprint_id": 77,       # Unisex Heavy Blend Hooded Sweatshirt (Gildan 18500)
+    "provider_id":  99,       # Printify Choice
+    "variants": [
+        # Black: S–5XL
+        {"id": 32918, "size": "S"},
+        {"id": 32919, "size": "M"},
+        {"id": 32920, "size": "L"},
+        {"id": 32921, "size": "XL"},
+        {"id": 32922, "size": "2XL"},
+        {"id": 32923, "size": "3XL"},
+        {"id": 32924, "size": "4XL"},
+        {"id": 32925, "size": "5XL"},
+        # White: S–5XL
+        {"id": 32910, "size": "S"},
+        {"id": 32911, "size": "M"},
+        {"id": 32912, "size": "L"},
+        {"id": 32913, "size": "XL"},
+        {"id": 32914, "size": "2XL"},
+        {"id": 32915, "size": "3XL"},
+        {"id": 32916, "size": "4XL"},
+        {"id": 32917, "size": "5XL"},
+    ],
+    "base_cost_cents": 2158,
+    "oversize_costs": {
+        "2XL": 2378, "3XL": 2503, "4XL": 2549, "5XL": 2548,
+    },
+    "shipping_cents": 739,
+}
+
 FRONT_CONFIG = {
     "A": {
         "designs_dir":  os.path.join(WORKSPACE, "front_a_sneaker", "approved"),
         "spreadsheet":  os.path.join(SP, "designs_front_a.xlsx"),
         "sheet_name":   "Designs",
-        "blueprint_id": 145,     # Unisex Heavy Blend Hoodie (Gildan 18500)
-        "provider_id":  99,      # Monster Digital
-        "variants": [
-            # Black: S–5XL
-            {"id": 38164, "size": "S"},
-            {"id": 38178, "size": "M"},
-            {"id": 38192, "size": "L"},
-            {"id": 38206, "size": "XL"},
-            {"id": 38220, "size": "2XL"},
-            {"id": 42122, "size": "3XL"},
-            {"id": 66213, "size": "4XL"},
-            {"id": 95180, "size": "5XL"},
-            # White: S–5XL
-            {"id": 38163, "size": "S"},
-            {"id": 38177, "size": "M"},
-            {"id": 38191, "size": "L"},
-            {"id": 38205, "size": "XL"},
-            {"id": 38219, "size": "2XL"},
-            {"id": 42120, "size": "3XL"},
-            {"id": 66211, "size": "4XL"},
-            {"id": 95175, "size": "5XL"},
-        ],
-        "base_cost_cents": 988,       # S–XL cost from Printify
-        "oversize_costs": {            # cost for larger sizes
-            "2XL": 1129, "3XL": 1248, "4XL": 1382, "5XL": 1502,
+        "products": {
+            "tshirt": {
+                **_TSHIRT_PRODUCT,
+                "tags": [
+                    "sneakerhead shirt", "sneaker collector tee",
+                    "streetwear graphic tee", "sneaker culture",
+                    "hypebeast clothing", "rotation tee",
+                    "sneaker lover gift", "kicks shirt", "sneakerhead gift",
+                    "urban streetwear", "sneaker graphic", "sneaker tee",
+                    "streetwear tee",
+                ],
+                "title_template": (
+                    "{name} | Sneakerhead Tee | Sneaker Collector Shirt "
+                    "| Streetwear Graphic Tee | Gift for Sneaker Lover"
+                ),
+                "description_template": (
+                    "This sneakerhead graphic celebrates sneaker culture "
+                    "and collector life. Designed for the daily rotation "
+                    "and the deadstock shelf alike.\n\n"
+                    "* Soft, lightweight cotton\n"
+                    "* DTG printed, wash-resistant\n"
+                    "* Available in multiple sizes and colors\n\n"
+                    "Perfect gift for sneakerheads, sneaker collectors, "
+                    "and streetwear fans."
+                ),
+            },
+            "hoodie": {
+                **_HOODIE_PRODUCT,
+                "tags": [
+                    "sneakerhead hoodie", "sneaker collector hoodie",
+                    "streetwear hoodie", "sneaker culture",
+                    "hypebeast clothing", "sneaker lover gift",
+                    "kicks hoodie", "sneakerhead gift", "urban streetwear",
+                    "sneaker graphic", "streetwear pullover",
+                    "hoodie gift", "sneaker apparel",
+                ],
+                "title_template": (
+                    "{name} | Sneakerhead Hoodie | Sneaker Collector Hoodie "
+                    "| Streetwear Graphic Hoodie | Gift for Sneaker Lover"
+                ),
+                "description_template": (
+                    "This sneakerhead graphic celebrates sneaker culture "
+                    "and collector life. Designed for the daily rotation "
+                    "and the deadstock shelf alike.\n\n"
+                    "* Oversized streetwear fit -- size up for drop-shoulder "
+                    "silhouette\n"
+                    "* Premium heavyweight fleece blend\n"
+                    "* DTG printed, wash-resistant\n\n"
+                    "Perfect gift for sneakerheads, sneaker collectors, "
+                    "and streetwear fans."
+                ),
+            },
         },
-        "shipping_cents": 399,         # US first-item shipping
-        "tags": [
-            "sneakerhead shirt", "sneaker collector tee", "streetwear graphic tee",
-            "sneaker culture", "hypebeast clothing", "rotation tee",
-            "sneaker lover gift", "kicks shirt", "sneakerhead gift",
-            "streetwear hoodie", "sneaker hoodie", "urban streetwear",
-            "sneaker graphic",
-        ],
-        "title_template": (
-            "{name} | Sneakerhead Tee | Sneaker Collector Shirt "
-            "| Streetwear Graphic Tee | Gift for Sneaker Lover"
-        ),
-        "description_template": (
-            "This sneakerhead graphic celebrates sneaker culture and collector "
-            "life. Designed for the daily rotation and the deadstock shelf "
-            "alike.\n\n"
-            "* Oversized streetwear fit -- size up for drop-shoulder silhouette\n"
-            "* Premium heavyweight cotton\n"
-            "* DTG printed, wash-resistant\n\n"
-            "Perfect gift for sneakerheads, sneaker collectors, "
-            "and streetwear fans."
-        ),
     },
     "B": {
         "designs_dir":  os.path.join(WORKSPACE, "front_b_general", "approved"),
         "spreadsheet":  os.path.join(SP, "designs_front_b.xlsx"),
         "sheet_name":   "Designs",
-        "blueprint_id": 5,       # Unisex Softstyle T-Shirt (Gildan 64000)
-        "provider_id":  99,
-        "variants": [
-            # Solid Black: S–5XL
-            {"id": 17427, "size": "S"},
-            {"id": 17428, "size": "M"},
-            {"id": 17429, "size": "L"},
-            {"id": 17430, "size": "XL"},
-            {"id": 17431, "size": "2XL"},
-            {"id": 17432, "size": "3XL"},
-            {"id": 17433, "size": "4XL"},
-            {"id": 101781, "size": "5XL"},
-            # Solid White: S–5XL
-            {"id": 17643, "size": "S"},
-            {"id": 17644, "size": "M"},
-            {"id": 17645, "size": "L"},
-            {"id": 17646, "size": "XL"},
-            {"id": 17647, "size": "2XL"},
-            {"id": 17648, "size": "3XL"},
-            {"id": 17649, "size": "4XL"},
-            {"id": 101810, "size": "5XL"},
-        ],
-        "base_cost_cents": 1163,      # S–XL cost from Printify
-        "oversize_costs": {
-            "2XL": 1409, "3XL": 1613, "4XL": 1796, "5XL": 1930,
+        "products": {
+            "tshirt": {
+                **_TSHIRT_PRODUCT,
+                "tags": [
+                    "graphic tee", "unique gift shirt", "funny tee",
+                    "quote shirt", "trendy tee", "minimalist graphic",
+                    "gift for him", "gift for her", "unisex tee",
+                    "casual shirt", "everyday tee", "cool graphic tee",
+                    "statement tee",
+                ],
+                "title_template": "{name} | Graphic Tee | Unique Gift",
+                "description_template": (
+                    "A unique graphic tee perfect as a gift or for "
+                    "everyday wear.\n\n"
+                    "* Soft, lightweight cotton\n"
+                    "* DTG printed, wash-resistant\n"
+                    "* Available in multiple sizes and colors"
+                ),
+            },
+            "hoodie": {
+                **_HOODIE_PRODUCT,
+                "tags": [
+                    "graphic hoodie", "unique gift hoodie", "funny hoodie",
+                    "quote hoodie", "trendy hoodie", "minimalist graphic",
+                    "gift for him", "gift for her", "unisex hoodie",
+                    "casual hoodie", "everyday hoodie", "cool graphic hoodie",
+                    "statement hoodie",
+                ],
+                "title_template": "{name} | Graphic Hoodie | Unique Gift",
+                "description_template": (
+                    "A unique graphic hoodie perfect as a gift or for "
+                    "everyday wear.\n\n"
+                    "* Heavyweight fleece blend\n"
+                    "* DTG printed, wash-resistant\n"
+                    "* Available in multiple sizes and colors"
+                ),
+            },
         },
-        "shipping_cents": 399,         # US first-item shipping
-        "tags": [
-            "graphic tee", "unique gift shirt", "funny tee", "quote shirt",
-            "trendy tee", "minimalist graphic", "gift for him", "gift for her",
-            "unisex tee", "casual shirt", "everyday tee", "cool graphic tee",
-            "statement tee",
-        ],
-        "title_template": "{name} | Graphic Tee | Unique Gift",
-        "description_template": (
-            "A unique graphic tee perfect as a gift or for everyday wear.\n\n"
-            "* Soft, lightweight cotton\n"
-            "* DTG printed, wash-resistant\n"
-            "* Available in multiple sizes and colors"
-        ),
     },
 }
 
@@ -305,9 +369,10 @@ def update_spreadsheet_ids(spreadsheet_path, sheet_name, filename,
     return updated
 
 
-def run_upload(front, draft=False, dry_run=False):
+def run_upload(front, product_type="tshirt", draft=False, dry_run=False):
     """Main upload loop for a front."""
     cfg = FRONT_CONFIG[front]
+    pcfg = cfg["products"][product_type]
     designs_dir = cfg["designs_dir"]
 
     if not os.path.isdir(designs_dir):
@@ -321,14 +386,14 @@ def run_upload(front, draft=False, dry_run=False):
         return
 
     action = "publish to Etsy" if not draft else "create as draft (no publish)"
-    print(f"  Front {front}: {len(files)} designs to upload ({action})\n")
+    print(f"  Front {front} ({product_type}): {len(files)} designs to upload ({action})\n")
 
     results = []
     for filename in files:
         filepath = os.path.join(designs_dir, filename)
         base_name = os.path.splitext(filename)[0].replace("_", " ").title()
-        title = cfg["title_template"].format(name=base_name)
-        desc = cfg["description_template"]
+        title = pcfg["title_template"].format(name=base_name)
+        desc = pcfg["description_template"]
 
         if dry_run:
             print(f"  [DRY] {filename} -> '{title[:60]}...'")
@@ -340,7 +405,7 @@ def run_upload(front, draft=False, dry_run=False):
             print(f"  [1/3] Uploaded image: {filename} (id={image_id})")
 
             # Step 2: Create product
-            product_id = create_product(image_id, title, desc, cfg, design_name=base_name)
+            product_id = create_product(image_id, title, desc, pcfg, design_name=base_name)
             print(f"  [2/3] Created product: {product_id}")
 
             # Step 3: Publish (unless draft mode for drops)
@@ -439,6 +504,8 @@ def main():
     up = sub.add_parser("upload", help="Upload and publish designs")
     up.add_argument("--front", required=True, choices=["A", "B"],
                     help="A = Sneaker Culture, B = Generalized")
+    up.add_argument("--product", default="tshirt", choices=["tshirt", "hoodie"],
+                    help="Product type: tshirt or hoodie (default: tshirt)")
     up.add_argument("--draft", action="store_true",
                     help="Create on Printify but don't publish to Etsy (for drops)")
     up.add_argument("--dry-run", action="store_true",
@@ -465,7 +532,7 @@ def main():
     if args.command == "upload":
         if not args.dry_run:
             check_config()
-        run_upload(args.front, draft=args.draft, dry_run=args.dry_run)
+        run_upload(args.front, product_type=args.product, draft=args.draft, dry_run=args.dry_run)
 
     elif args.command == "sync-ids":
         check_config()

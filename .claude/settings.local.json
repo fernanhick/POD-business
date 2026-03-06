@@ -16,7 +16,8 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:www.postman.com)",
       "WebFetch(domain:bulk-pod-product-creator.com)",
-      "WebFetch(domain:help.printify.com)"
+      "WebFetch(domain:help.printify.com)",
+      "Bash(ls:*)"
     ]
   }
 }

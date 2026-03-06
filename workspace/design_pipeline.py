@@ -36,6 +36,8 @@ import argparse
 from datetime import date
 
 import requests
+import numpy as np
+from PIL import Image, ImageDraw
 from dotenv import load_dotenv
 
 # ── Load .env from workspace root ─────────────────────────────────
@@ -56,6 +58,72 @@ HF_API_TOKEN     = os.environ.get("HF_API_TOKEN", "")
 # ── Hugging Face Inference Config ─────────────────────────────────
 HF_ROUTER = "https://router.huggingface.co/hf-inference/models"
 HF_MODEL  = "stabilityai/stable-diffusion-xl-base-1.0"
+
+
+# ── Background Removal ──────────────────────────────────────────────
+# Edge-connected flood fill: removes ONLY white pixels reachable from
+# the image border.  White text / graphics inside the design are safe
+# because they are surrounded by non-white pixels (not connected to
+# the border through white).
+
+def remove_background(filepath, tolerance=20):
+    """Remove the white background from a rendered design PNG.
+
+    Uses flood fill from border seed points on a downscaled copy (fast),
+    then refines at full resolution so only genuinely near-white pixels
+    are made transparent.  Interior white elements are never touched.
+    """
+    img = Image.open(filepath).convert("RGBA")
+    w, h = img.size
+
+    # --- Downscale for fast flood fill (~800px short side) -----------
+    scale = max(1, min(w, h) // 800)
+    sw, sh = w // scale, h // scale
+    small = img.resize((sw, sh), Image.NEAREST).convert("RGB")
+
+    # Flood fill from corners + edge midpoints with a magenta marker.
+    # PIL's floodfill spreads through adjacent pixels whose channel
+    # values are within ±tolerance of the seed pixel.
+    marker = (255, 0, 255)
+    seeds = [
+        (0, 0), (sw - 1, 0), (0, sh - 1), (sw - 1, sh - 1),
+        (sw // 2, 0), (sw // 2, sh - 1),
+        (0, sh // 2), (sw - 1, sh // 2),
+    ]
+    for seed in seeds:
+        try:
+            ImageDraw.floodfill(small, seed, marker, thresh=tolerance)
+        except Exception:
+            pass
+
+    # --- Build boolean mask from flood-filled region ----------------
+    small_arr = np.array(small)
+    bg_small = (
+        (small_arr[:, :, 0] == 255)
+        & (small_arr[:, :, 1] == 0)
+        & (small_arr[:, :, 2] == 255)
+    )
+
+    # --- Upscale mask to original resolution ------------------------
+    mask_img = Image.fromarray((bg_small * 255).astype(np.uint8))
+    mask_full = np.array(mask_img.resize((w, h), Image.NEAREST)) > 128
+
+    # --- Refine: only apply where the full-res pixel is near-white --
+    arr = np.array(img)
+    white_thresh = max(0, 255 - tolerance * 2)
+    is_white = np.all(arr[:, :, :3] > white_thresh, axis=2)
+    final_bg = mask_full & is_white
+
+    # --- Apply transparency -----------------------------------------
+    arr[final_bg, 3] = 0
+
+    result = Image.fromarray(arr)
+    result.save(filepath, "PNG")
+
+    removed_pct = final_bg.sum() / (w * h) * 100
+    print(f"  [BG-RM] Removed background ({removed_pct:.0f}% transparent): "
+          f"{os.path.basename(filepath)}")
+
 
 # ── Front A: Sneaker Culture Design Themes ────────────────────────
 DESIGN_THEMES = {
@@ -690,6 +758,26 @@ def stage_text_overlay(records, designs_dir, font_path=None, font_size=None):
     return records
 
 
+def stage_remove_bg(records, designs_dir):
+    """Stage 2c: Remove white background from rendered designs.
+    Uses edge-connected flood fill — only border-connected white is
+    made transparent. Interior white (text, graphics) is preserved."""
+    removed = 0
+    for record in records:
+        filepath = record.get("_rendered_path") or \
+                   os.path.join(designs_dir, record["filename"])
+        if os.path.isfile(filepath):
+            try:
+                remove_background(filepath)
+                removed += 1
+            except Exception as e:
+                print(f"  [ERR] Background removal failed for "
+                      f"{record['filename']}: {e}")
+    print(f"  [STAGE 2c] Background removed from "
+          f"{removed}/{len(records)} designs")
+    return records
+
+
 # ── Pipeline Stages ───────────────────────────────────────────────
 
 def stage_generate_prompts_a(drop_id, themes=None, palette_index=0,
@@ -935,6 +1023,10 @@ def cmd_batch(args):
         else:
             print(f"  Unknown renderer: {args.render}")
 
+        # Stage 2c: Remove white background for transparent PNGs
+        if not args.no_bg_remove:
+            records = stage_remove_bg(records, designs_dir)
+
     # Stage 3: Inspect
     records = stage_inspect(records, designs_dir)
 
@@ -1102,6 +1194,10 @@ def cmd_variant(args):
                         font_path=args.font, font_size=args.font_size,
                     )
 
+            # Stage 2c: Remove white background
+            if not args.no_bg_remove:
+                records = stage_remove_bg(records, designs_dir)
+
     # Inspect + TM + Approve
     records = stage_inspect(records, designs_dir)
     records = stage_trademark(records, skip_api=args.skip_api)
@@ -1139,6 +1235,8 @@ def main():
                        help="How to add text: pillow (local) or ideogram (remix API)")
     batch.add_argument("--no-text-overlay", action="store_true",
                        help="Skip text overlay entirely (graphic-only output)")
+    batch.add_argument("--no-bg-remove", action="store_true",
+                       help="Skip background removal (keep white background)")
     batch.add_argument("--count", type=int, default=0,
                        help="Limit number of designs to generate (0 = all)")
     batch.add_argument("--skip-api", action="store_true",
@@ -1174,6 +1272,7 @@ def main():
     var.add_argument("--text-renderer", choices=["pillow", "ideogram"],
                      default="pillow")
     var.add_argument("--no-text-overlay", action="store_true")
+    var.add_argument("--no-bg-remove", action="store_true")
     var.add_argument("--font", help="Path to .ttf font")
     var.add_argument("--font-size", type=int, default=None)
     var.add_argument("--skip-api", action="store_true")
