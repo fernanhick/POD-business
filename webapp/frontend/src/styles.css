@@ -118,6 +118,11 @@ button.danger {
   border: none;
 }
 
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .table-wrap {
   background: white;
   border: 1px solid #e5e7eb;
@@ -292,6 +297,126 @@ td {
   padding: 8px 10px;
 }
 
+.gen-modal-content {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  width: min(95vw, 1000px);
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.gen-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.gen-modal-log {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 12px;
+  line-height: 1.45;
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 12px;
+  border-radius: 8px;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.gen-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.gen-modal-card {
+  background: #f8fafc;
+  border: 2px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: border-color 0.15s;
+}
+
+.gen-card-approved {
+  border-color: #22c55e;
+  background: #f0fdf4;
+}
+
+.gen-card-rejected {
+  border-color: #ef4444;
+  background: #fef2f2;
+}
+
+.gen-modal-card-img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 6px;
+  background: #e5e7eb;
+}
+
+.gen-modal-card-name {
+  font-size: 11px;
+  color: #6b7280;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gen-modal-single {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.gen-modal-single-img {
+  max-width: 480px;
+  max-height: 400px;
+  width: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+}
+
+.gen-modal-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+}
+
+.gen-modal-actions button {
+  font-size: 12px;
+  padding: 5px 10px;
+}
+
+.gen-modal-selected {
+  outline: 2px solid #111827;
+  outline-offset: 1px;
+}
+
+.spinner {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border: 2px solid #d1d5db;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 @media (max-width: 1100px) {
   .app {
     grid-template-columns: 1fr;
@@ -310,5 +435,8 @@ td {
   }
   .form-grid {
     grid-template-columns: 1fr;
+  }
+  .gen-modal-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   }
 }

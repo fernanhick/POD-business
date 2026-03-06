@@ -8,20 +8,36 @@ This app runs locally and wraps your existing automation inside `workspace/`.
 - `frontend/` React + Vite UI
 - Existing scripts/data stay in `../workspace/` (unchanged)
 
-## Run Backend
+## One-command start/stop
+
+```powershell
+cd "d:\Projects\POD business\webapp"
+.\servers.ps1 start
+```
+
+Useful commands:
+
+```powershell
+.\servers.ps1 status
+.\servers.ps1 stop
+```
+
+The script writes logs and PID files under `webapp/.runtime/`.
+
+## Backend setup (first run)
 
 ```powershell
 cd "d:\Projects\POD business\webapp\backend"
-c:/python314/python.exe -m pip install -r requirements.txt
-c:/python314/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+py -3.13 -m venv .venv313
+.\.venv313\Scripts\python.exe -m pip install --upgrade pip
+.\.venv313\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-## Run Frontend
+## Frontend setup (first run)
 
 ```powershell
 cd "d:\Projects\POD business\webapp\frontend"
 npm install
-npm run dev
 ```
 
 Open http://127.0.0.1:5173

@@ -36,6 +36,16 @@ def next_id(ws, prefix, col=1, start_row=3):
     return f"{prefix}{str(last + 1).zfill(4)}"
 
 
+def existing_filenames(ws, col=2, start_row=3):
+    """Return set of filenames already in the spreadsheet to prevent duplicates."""
+    names = set()
+    for row in ws.iter_rows(min_row=start_row, max_col=col, values_only=True):
+        val = row[1] if len(row) > 1 else row[0]
+        if val:
+            names.add(str(val).strip())
+    return names
+
+
 def append_design_a(ws, record):
     dsn_id = next_id(ws, "DSN-A-")
     ws.append([
@@ -120,11 +130,19 @@ def main():
         niche_wb = load_workbook(NICHES_B)
         phrase_ws = niche_wb["Phrase Bank"]
 
+    known = existing_filenames(dsn_ws)
+    skipped = 0
     added = 0
     for record in records:
         if not record.get("filename"):
-            print(f"  ⚠️  Skipping — no filename: {record}")
+            print(f"  [WARN] Skipping -- no filename: {record}")
             continue
+
+        fname = record["filename"].strip()
+        if fname in known:
+            skipped += 1
+            continue
+        known.add(fname)
 
         if args.front == "A":
             dsn_id = append_design_a(dsn_ws, record)
@@ -135,18 +153,18 @@ def main():
 
         append_tm_log(tm_ws, record, dsn_id, args.front)
         added += 1
-        icon = "✅" if record.get("approved") else "⚠️ "
+        tag = "OK" if record.get("approved") else "REVIEW"
         name = record.get("design_name") or record.get("phrase","?")
-        print(f"  {icon} [{args.front}] {dsn_id} — {name}")
+        print(f"  [{tag}] [{args.front}] {dsn_id} -- {name}")
 
     if not args.dry_run:
         dsn_wb.save(DESIGNS_A if args.front == "A" else DESIGNS_B)
         tm_wb.save(TM_LOG)
         if args.front == "B":
             niche_wb.save(NICHES_B)
-        print(f"\n  ✅ {added} records written to spreadsheets.")
+        print(f"\n  Done: {added} records written, {skipped} duplicates skipped.")
     else:
-        print(f"\n  Dry run — {added} records would be written.")
+        print(f"\n  Dry run -- {added} records would be written, {skipped} duplicates skipped.")
 
 
 if __name__ == "__main__":

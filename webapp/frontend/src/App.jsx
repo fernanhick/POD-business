@@ -1,27 +1,62 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
 
 const NAV_ITEMS = [
   "Dashboard",
   "Designs",
   "Generate",
-  "Approvals",
   "Expenses",
   "Jobs",
 ];
 
 const initialGeneration = {
-  generationStyle: "random",
-  mode: "single",
-  designType: "general",
-  randomVisualMode: "mixed",
+  designType: "sneaker",
+  visualMode: "random",
+  palette: "0",
+  count: "0",
   dropId: "",
   phrase: "",
   niche: "",
   subNiche: "",
-  style: "",
-  render: "",
   skipApi: false,
+};
+
+const COUNT_OPTIONS = [
+  { value: "0", label: "All (default batch)" },
+  { value: "1", label: "Single design" },
+  { value: "10", label: "10 designs" },
+  { value: "20", label: "20 designs" },
+  { value: "custom", label: "Custom amount..." },
+];
+
+const PALETTE_OPTIONS = [
+  { value: "0", label: "Black & Cream (vintage wash)" },
+  { value: "1", label: "Off-white & Charcoal (distressed)" },
+  { value: "2", label: "Forest Green & Ecru (military)" },
+  { value: "3", label: "Washed Black & Bone White (faded)" },
+  { value: "4", label: "Navy & Gold (luxury streetwear)" },
+  { value: "5", label: "Burgundy & Cream (vintage sport)" },
+  { value: "6", label: "Rust Orange & Sand (earth tone)" },
+  { value: "7", label: "Black & White (high contrast)" },
+  { value: "8", label: "Olive & Tan (utilitarian)" },
+  { value: "9", label: "Slate Grey & Neon Green (tech)" },
+  { value: "10", label: "Terracotta & Ivory (bohemian)" },
+  { value: "11", label: "Deep Teal & Cream (coastal)" },
+  { value: "12", label: "Dusty Rose & Charcoal (modern)" },
+  { value: "13", label: "Mustard & Dark Brown (retro 70s)" },
+  { value: "14", label: "Lavender & Slate (muted pastel)" },
+  { value: "15", label: "Red & Black (bold graphic)" },
+];
+
+const VISUAL_MODE_HINTS = {
+  random:
+    "Randomly generates a text design, graphic + text, or graphic-only design.",
+  text_only:
+    "Ideogram renders the complete typography design with text in one shot. Best for text-heavy streetwear and quote designs.",
+  graphic_text:
+    "HuggingFace generates the graphic, then Ideogram adds text via remix. Two-step pipeline for best quality.",
+  graphic_only:
+    "HuggingFace generates a standalone graphic/illustration with no text overlay.",
 };
 
 const initialExpense = {
@@ -59,16 +94,22 @@ export function App() {
     status: "all",
   });
   const [modalState, setModalState] = useState(null);
+  const [variantForm, setVariantForm] = useState(null);
   const [selectedJobLog, setSelectedJobLog] = useState(null);
   const [generationOptions, setGenerationOptions] = useState({
     sneaker: { dropIds: [] },
-    general: { niches: [], subNiches: [], styles: [], phrases: [] },
-    renderers: ["hf", "ideogram", "leonardo"],
+    general: { niches: [], subNiches: [], phrases: [] },
   });
+  const [genModal, setGenModal] = useState(null);
+  const genModalLogRef = useRef(null);
+  const [printifyConfigured, setPrintifyConfigured] = useState(false);
+  const [uploadingDesign, setUploadingDesign] = useState(null);
 
-  const loadAll = async () => {
-    setLoading(true);
-    setError("");
+  const loadAll = useCallback(async (silent = false) => {
+    if (!silent) {
+      setLoading(true);
+      setError("");
+    }
     try {
       const [summaryRes, designsRes, jobsRes, expensesRes] = await Promise.all([
         api.summary(),
@@ -81,17 +122,44 @@ export function App() {
       setDesigns(designsRes.items || []);
       setJobs(jobsRes.items || []);
       setExpenses(expensesRes.items || []);
-      setGenerationOptions(generationOptionsRes || generationOptions);
+      setGenerationOptions(generationOptionsRes || {});
     } catch (err) {
-      setError(err.message || "Failed to load data");
+      if (!silent) setError(err.message || "Failed to load data");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
+    }
+  }, []);
+
+  // Initial load
+  useEffect(() => {
+    loadAll();
+  }, [loadAll]);
+
+  useEffect(() => {
+    api.printifyStatus().then((res) => setPrintifyConfigured(res.configured)).catch(() => {});
+  }, []);
+
+  const handlePrintifyUpload = async (designType, filename) => {
+    setUploadingDesign(filename);
+    setError("");
+    try {
+      await api.printifyUpload({ designType, filename, draft: false });
+      await loadAll(true);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setUploadingDesign(null);
     }
   };
 
+  // Auto-poll: 3s when a job is running/queued, 30s otherwise
+  const hasActiveJob = jobs.some((j) => j.status === "running" || j.status === "queued");
+  const pollInterval = hasActiveJob ? 3000 : 30000;
+
   useEffect(() => {
-    loadAll();
-  }, []);
+    const timer = setInterval(() => loadAll(true), pollInterval);
+    return () => clearInterval(timer);
+  }, [loadAll, pollInterval]);
 
   const filteredDesigns = useMemo(() => {
     return designs.filter((item) => {
@@ -113,29 +181,48 @@ export function App() {
     e.preventDefault();
     setError("");
     try {
-      if (
-        generationForm.generationStyle === "detailed" &&
-        generationForm.mode === "single" &&
-        generationForm.designType === "general" &&
-        !generationForm.phrase.trim()
-      ) {
-        setError("Single general generation requires a phrase.");
-        return;
-      }
-
       const payload = {
-        ...generationForm,
-        render: generationForm.render || null,
+        designType: generationForm.designType,
+        visualMode: generationForm.visualMode,
+        palette: Number(generationForm.palette),
+        count: Number(generationForm.count) || 0,
         dropId: generationForm.dropId || null,
         phrase: generationForm.phrase || null,
         niche: generationForm.niche || null,
         subNiche: generationForm.subNiche || null,
-        style: generationForm.style || null,
+        skipApi: generationForm.skipApi,
       };
-      await api.generate(payload);
-      setSelectedJobLog(null);
-      setTab("Jobs");
-      await loadAll();
+      const result = await api.generate(payload);
+      setGenModal({
+        jobId: result.jobId, phase: "generating", output: "", status: "queued",
+        generatedFiles: [], designType: payload.designType, showLog: true, approvedFiles: {},
+      });
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleVariant = async (e) => {
+    e.preventDefault();
+    if (!variantForm) return;
+    setError("");
+    try {
+      const payload = {
+        designType: variantForm.designType,
+        designName: variantForm.designName,
+        palette: Number(variantForm.palette),
+        visualMode: variantForm.visualMode,
+        phrase: variantForm.phrase || null,
+        niche: variantForm.niche || null,
+        subNiche: variantForm.subNiche || null,
+        skipApi: false,
+      };
+      const result = await api.variant(payload);
+      setVariantForm(null);
+      setGenModal({
+        jobId: result.jobId, phase: "generating", output: "", status: "queued",
+        generatedFiles: [], designType: payload.designType, showLog: true, approvedFiles: {},
+      });
     } catch (err) {
       setError(err.message);
     }
@@ -158,8 +245,7 @@ export function App() {
     setError("");
     try {
       await api.approve({ designType, filename, approved });
-      await loadAll();
-      setTab("Approvals");
+      await loadAll(true);
     } catch (err) {
       setError(err.message);
     }
@@ -281,6 +367,71 @@ export function App() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [modalState]);
+
+  // Gen modal polling
+  useEffect(() => {
+    if (!genModal || genModal.phase !== "generating") return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const data = await api.job(genModal.jobId);
+        if (cancelled) return;
+        const terminal = data.status === "success" || data.status === "failed";
+        setGenModal((prev) => {
+          if (!prev || prev.jobId !== data.id) return prev;
+          return {
+            ...prev,
+            output: data.output || "",
+            status: data.status,
+            generatedFiles: data.generated_files || [],
+            phase: terminal ? (data.status === "success" ? "complete" : "failed") : "generating",
+          };
+        });
+        if (terminal) loadAll(true);
+      } catch {
+        // ignore poll errors
+      }
+    };
+    poll();
+    const timer = setInterval(poll, 2000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [genModal?.jobId, genModal?.phase, loadAll]);
+
+  // Auto-scroll gen modal log
+  useEffect(() => {
+    if (genModalLogRef.current) {
+      genModalLogRef.current.scrollTop = genModalLogRef.current.scrollHeight;
+    }
+  }, [genModal?.output]);
+
+  const handleModalApproval = async (designType, filename, approved) => {
+    try {
+      await api.approve({ designType, filename, approved });
+      setGenModal((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          approvedFiles: { ...prev.approvedFiles, [filename]: approved },
+        };
+      });
+      loadAll(true);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const closeGenModal = () => {
+    setGenModal(null);
+    loadAll(true);
+  };
+
+  // Escape key for gen modal
+  useEffect(() => {
+    if (!genModal) return;
+    const onKey = (e) => { if (e.key === "Escape") closeGenModal(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [genModal]);
 
   const modalImage = modalState
     ? modalState.items[modalState.index] || null
@@ -407,6 +558,7 @@ export function App() {
                     <th>IP Risk</th>
                     <th>Location</th>
                     <th>Status</th>
+                    <th>Printify</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -449,26 +601,77 @@ export function App() {
                         </span>
                       </td>
                       <td>{item.status || "-"}</td>
+                      <td>
+                        {item.printifyProductId ? (
+                          <span className="badge approved">Published</span>
+                        ) : item.location === "approved" ? (
+                          <span className="badge generated">Ready</span>
+                        ) : (
+                          "-"
+                        )}
+                      </td>
                       <td className="row">
+                        {item.location !== "approved" && (
+                          <button
+                            className="primary"
+                            onClick={() =>
+                              updateApproval(item.designType, item.filename, true)
+                            }
+                          >
+                            Approve
+                          </button>
+                        )}
+                        {item.location !== "rejected" && (
+                          <button
+                            className="danger"
+                            onClick={() =>
+                              updateApproval(
+                                item.designType,
+                                item.filename,
+                                false,
+                              )
+                            }
+                          >
+                            Reject
+                          </button>
+                        )}
+                        {item.location === "approved" &&
+                          !item.printifyProductId &&
+                          printifyConfigured && (
+                            <button
+                              className="primary"
+                              disabled={uploadingDesign === item.filename}
+                              onClick={() =>
+                                handlePrintifyUpload(
+                                  item.designType,
+                                  item.filename,
+                                )
+                              }
+                            >
+                              {uploadingDesign === item.filename
+                                ? "Uploading..."
+                                : "Upload"}
+                            </button>
+                          )}
                         <button
-                          className="primary"
                           onClick={() =>
-                            updateApproval(item.designType, item.filename, true)
+                            setVariantForm({
+                              designType: item.designType,
+                              designName:
+                                item.name ||
+                                item.phrase ||
+                                item.filename
+                                  .replace(/\.png$/, "")
+                                  .replace(/_\d{3}$/, ""),
+                              phrase: item.phrase || "",
+                              niche: "",
+                              subNiche: "",
+                              palette: "1",
+                              visualMode: "text_only",
+                            })
                           }
                         >
-                          Approve
-                        </button>
-                        <button
-                          className="danger"
-                          onClick={() =>
-                            updateApproval(
-                              item.designType,
-                              item.filename,
-                              false,
-                            )
-                          }
-                        >
-                          Reject
+                          Variant
                         </button>
                       </td>
                     </tr>
@@ -476,34 +679,67 @@ export function App() {
                 </tbody>
               </table>
             </div>
+
+            {variantForm && (
+              <form
+                className="card"
+                style={{ marginTop: 12 }}
+                onSubmit={handleVariant}
+              >
+                <h3 className="section-title">
+                  Colorway Variant: {variantForm.designName}
+                </h3>
+                <div className="form-grid">
+                  <select
+                    value={variantForm.palette}
+                    onChange={(e) =>
+                      setVariantForm((old) => ({
+                        ...old,
+                        palette: e.target.value,
+                      }))
+                    }
+                  >
+                    {PALETTE_OPTIONS.map((p) => (
+                      <option key={p.value} value={p.value}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={variantForm.visualMode}
+                    onChange={(e) =>
+                      setVariantForm((old) => ({
+                        ...old,
+                        visualMode: e.target.value,
+                      }))
+                    }
+                  >
+                    <option value="text_only">Text Design (Ideogram)</option>
+                    <option value="graphic_text">
+                      Graphic + Text (HuggingFace + Ideogram)
+                    </option>
+                    <option value="graphic_only">
+                      Graphic Only (HuggingFace)
+                    </option>
+                  </select>
+                </div>
+                <div className="row" style={{ marginTop: 12 }}>
+                  <button className="primary" type="submit">
+                    Generate Variant
+                  </button>
+                  <button type="button" onClick={() => setVariantForm(null)}>
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            )}
           </>
         )}
 
         {tab === "Generate" && (
           <form className="card" onSubmit={handleGenerate}>
-            <h3 className="section-title">Trigger Generation</h3>
+            <h3 className="section-title">Generate New Designs</h3>
             <div className="form-grid">
-              <select
-                value={generationForm.generationStyle}
-                onChange={(e) =>
-                  setGenerationForm((old) => ({
-                    ...old,
-                    generationStyle: e.target.value,
-                  }))
-                }
-              >
-                <option value="random">Random Generator</option>
-                <option value="detailed">Detailed Setup</option>
-              </select>
-              <select
-                value={generationForm.mode}
-                onChange={(e) =>
-                  setGenerationForm((old) => ({ ...old, mode: e.target.value }))
-                }
-              >
-                <option value="single">Single</option>
-                <option value="batch">Batch</option>
-              </select>
               <select
                 value={generationForm.designType}
                 onChange={(e) =>
@@ -513,161 +749,175 @@ export function App() {
                   }))
                 }
               >
-                <option value="general">General</option>
-                <option value="sneaker">Sneaker</option>
+                <option value="sneaker">Sneaker Culture (Front A)</option>
+                <option value="general">General Niche (Front B)</option>
               </select>
 
-              {generationForm.generationStyle === "random" && (
-                <select
-                  value={generationForm.randomVisualMode}
-                  onChange={(e) =>
-                    setGenerationForm((old) => ({
-                      ...old,
-                      randomVisualMode: e.target.value,
-                    }))
-                  }
-                >
-                  <option value="mixed">Mixed (Words + Some Images)</option>
-                  <option value="text_only">Words Only</option>
-                  <option value="text_plus_image">Words + Image</option>
-                </select>
-              )}
+              <select
+                value={generationForm.visualMode}
+                onChange={(e) =>
+                  setGenerationForm((old) => ({
+                    ...old,
+                    visualMode: e.target.value,
+                  }))
+                }
+              >
+                <option value="random">Random (mix of all types)</option>
+                <option value="text_only">Text Design (Ideogram)</option>
+                <option value="graphic_text">
+                  Graphic + Text (HuggingFace + Ideogram)
+                </option>
+                <option value="graphic_only">
+                  Graphic Only (HuggingFace, no text)
+                </option>
+              </select>
 
-              {generationForm.generationStyle === "detailed" && (
+              <div className="hint-box">
+                {VISUAL_MODE_HINTS[generationForm.visualMode]}
+              </div>
+
+              <select
+                value={generationForm.palette}
+                onChange={(e) =>
+                  setGenerationForm((old) => ({
+                    ...old,
+                    palette: e.target.value,
+                  }))
+                }
+              >
+                {PALETTE_OPTIONS.map((p) => (
+                  <option key={p.value} value={p.value}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <select
-                  value={generationForm.render}
+                  value={
+                    COUNT_OPTIONS.some((c) => c.value === generationForm.count)
+                      ? generationForm.count
+                      : "custom"
+                  }
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setGenerationForm((old) => ({
+                      ...old,
+                      count: v === "custom" ? old.count === "0" ? "" : old.count : v,
+                    }));
+                  }}
+                >
+                  {COUNT_OPTIONS.map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+                {!COUNT_OPTIONS.some((c) => c.value === generationForm.count) && (
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    placeholder="Amount"
+                    value={generationForm.count}
+                    onChange={(e) =>
+                      setGenerationForm((old) => ({
+                        ...old,
+                        count: e.target.value,
+                      }))
+                    }
+                    style={{ width: 90 }}
+                  />
+                )}
+              </div>
+
+              {generationForm.designType === "sneaker" && (
+                <select
+                  value={generationForm.dropId}
                   onChange={(e) =>
                     setGenerationForm((old) => ({
                       ...old,
-                      render: e.target.value,
+                      dropId: e.target.value,
                     }))
                   }
                 >
-                  <option value="">No Render</option>
-                  {(generationOptions.renderers || []).map((renderer) => (
-                    <option key={renderer} value={renderer}>
-                      {renderer}
+                  <option value="">Default Drop (DROP-01)</option>
+                  {(generationOptions.sneaker?.dropIds || []).map((drop) => (
+                    <option key={drop} value={drop}>
+                      {drop}
                     </option>
                   ))}
                 </select>
               )}
 
-              {generationForm.designType === "sneaker" &&
-                generationForm.generationStyle === "detailed" && (
+              {generationForm.designType === "general" && (
+                <>
                   <select
-                    value={generationForm.dropId}
+                    value=""
+                    onChange={(e) => {
+                      if (!e.target.value) {
+                        return;
+                      }
+                      setGenerationForm((old) => ({
+                        ...old,
+                        phrase: e.target.value,
+                      }));
+                    }}
+                  >
+                    <option value="">Pick a suggested phrase</option>
+                    {(generationOptions.general?.phrases || []).map(
+                      (phrase) => (
+                        <option key={phrase} value={phrase}>
+                          {phrase}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                  <input
+                    placeholder="Phrase (leave empty for auto-generated batch)"
+                    value={generationForm.phrase}
                     onChange={(e) =>
                       setGenerationForm((old) => ({
                         ...old,
-                        dropId: e.target.value,
+                        phrase: e.target.value,
+                      }))
+                    }
+                  />
+                  <select
+                    value={generationForm.niche}
+                    onChange={(e) =>
+                      setGenerationForm((old) => ({
+                        ...old,
+                        niche: e.target.value,
                       }))
                     }
                   >
-                    <option value="">Auto / Default Drop</option>
-                    {(generationOptions.sneaker?.dropIds || []).map((drop) => (
-                      <option key={drop} value={drop}>
-                        {drop}
+                    <option value="">Any Niche</option>
+                    {(generationOptions.general?.niches || []).map((niche) => (
+                      <option key={niche} value={niche}>
+                        {niche}
                       </option>
                     ))}
                   </select>
-                )}
-
-              {generationForm.designType === "general" &&
-                generationForm.generationStyle === "detailed" && (
-                  <>
-                    <select
-                      value=""
-                      onChange={(e) => {
-                        if (!e.target.value) {
-                          return;
-                        }
-                        setGenerationForm((old) => ({
-                          ...old,
-                          phrase: e.target.value,
-                        }));
-                      }}
-                    >
-                      <option value="">Pick a suggested phrase</option>
-                      {(generationOptions.general?.phrases || []).map(
-                        (phrase) => (
-                          <option key={phrase} value={phrase}>
-                            {phrase}
-                          </option>
-                        ),
-                      )}
-                    </select>
-                    <input
-                      placeholder="Custom phrase (required for single)"
-                      value={generationForm.phrase}
-                      onChange={(e) =>
-                        setGenerationForm((old) => ({
-                          ...old,
-                          phrase: e.target.value,
-                        }))
-                      }
-                    />
-                    <select
-                      value={generationForm.niche}
-                      onChange={(e) =>
-                        setGenerationForm((old) => ({
-                          ...old,
-                          niche: e.target.value,
-                        }))
-                      }
-                    >
-                      <option value="">Any Niche</option>
-                      {(generationOptions.general?.niches || []).map(
-                        (niche) => (
-                          <option key={niche} value={niche}>
-                            {niche}
-                          </option>
-                        ),
-                      )}
-                    </select>
-                    <select
-                      value={generationForm.subNiche}
-                      onChange={(e) =>
-                        setGenerationForm((old) => ({
-                          ...old,
-                          subNiche: e.target.value,
-                        }))
-                      }
-                    >
-                      <option value="">Any Sub-Niche</option>
-                      {(generationOptions.general?.subNiches || []).map(
-                        (subNiche) => (
-                          <option key={subNiche} value={subNiche}>
-                            {subNiche}
-                          </option>
-                        ),
-                      )}
-                    </select>
-                    <select
-                      value={generationForm.style}
-                      onChange={(e) =>
-                        setGenerationForm((old) => ({
-                          ...old,
-                          style: e.target.value,
-                        }))
-                      }
-                    >
-                      <option value="">Default Style</option>
-                      {(generationOptions.general?.styles || []).map(
-                        (style) => (
-                          <option key={style} value={style}>
-                            {style}
-                          </option>
-                        ),
-                      )}
-                    </select>
-                  </>
-                )}
-
-              {generationForm.generationStyle === "random" && (
-                <div className="hint-box">
-                  Random mode uses existing phrase pools/themes and auto-picks
-                  niche/style/drop.
-                </div>
+                  <select
+                    value={generationForm.subNiche}
+                    onChange={(e) =>
+                      setGenerationForm((old) => ({
+                        ...old,
+                        subNiche: e.target.value,
+                      }))
+                    }
+                  >
+                    <option value="">Any Sub-Niche</option>
+                    {(generationOptions.general?.subNiches || []).map(
+                      (subNiche) => (
+                        <option key={subNiche} value={subNiche}>
+                          {subNiche}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                </>
               )}
 
               <label className="row">
@@ -686,79 +936,10 @@ export function App() {
             </div>
             <div style={{ marginTop: 12 }}>
               <button className="primary" type="submit">
-                Queue Job
+                Generate
               </button>
             </div>
           </form>
-        )}
-
-        {tab === "Approvals" && (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Preview</th>
-                  <th>Filename</th>
-                  <th>Type</th>
-                  <th>Current</th>
-                  <th>Spreadsheet Approved?</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {designs.map((item) => (
-                  <tr key={`approval-${item.designType}-${item.filename}`}>
-                    <td className="thumb-cell">
-                      {item.location !== "missing" ? (
-                        <button
-                          type="button"
-                          className="thumb-button"
-                          onClick={() => openImageModal(designs, item)}
-                        >
-                          <img
-                            className="design-thumb"
-                            src={api.designImageUrl(
-                              item.designType,
-                              item.filename,
-                            )}
-                            alt={item.filename}
-                            loading="lazy"
-                            onError={(event) => {
-                              event.currentTarget.style.display = "none";
-                            }}
-                          />
-                        </button>
-                      ) : (
-                        <span className="thumb-empty">No image</span>
-                      )}
-                    </td>
-                    <td>{item.filename}</td>
-                    <td>{item.designType}</td>
-                    <td>{item.location}</td>
-                    <td>{item.approved || "-"}</td>
-                    <td className="row">
-                      <button
-                        className="primary"
-                        onClick={() =>
-                          updateApproval(item.designType, item.filename, true)
-                        }
-                      >
-                        Approve
-                      </button>
-                      <button
-                        className="danger"
-                        onClick={() =>
-                          updateApproval(item.designType, item.filename, false)
-                        }
-                      >
-                        Reject
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
         )}
 
         {tab === "Expenses" && (
@@ -949,6 +1130,110 @@ export function App() {
               </div>
             )}
           </>
+        )}
+
+        {genModal && (
+          <div className="image-modal-overlay" onClick={closeGenModal}>
+            <div className="gen-modal-content" onClick={(e) => e.stopPropagation()}>
+              <div className="gen-modal-header">
+                <h3 style={{ margin: 0 }}>
+                  {genModal.phase === "generating" ? "Generating..." : genModal.phase === "complete" ? "Generation Complete" : "Generation Failed"}
+                </h3>
+                <div className="row" style={{ gap: 8 }}>
+                  <span className={`badge ${genModal.status === "success" ? "approved" : genModal.status === "failed" ? "rejected" : "generated"}`}>
+                    {genModal.status}
+                  </span>
+                  {genModal.phase === "generating" && <span className="spinner" />}
+                  <button type="button" onClick={closeGenModal}>Close</button>
+                </div>
+              </div>
+
+              {(genModal.phase === "generating" || genModal.showLog) && (
+                <pre className="gen-modal-log" ref={genModalLogRef}>
+                  {genModal.output || "Waiting for output..."}
+                </pre>
+              )}
+
+              {genModal.phase === "complete" && !genModal.showLog && (
+                <button
+                  type="button"
+                  style={{ marginBottom: 12, fontSize: 13 }}
+                  onClick={() => setGenModal((prev) => prev ? { ...prev, showLog: true } : prev)}
+                >
+                  Show Log
+                </button>
+              )}
+
+              {genModal.phase === "complete" && genModal.showLog && genModal.generatedFiles.length > 0 && (
+                <button
+                  type="button"
+                  style={{ marginBottom: 12, fontSize: 13 }}
+                  onClick={() => setGenModal((prev) => prev ? { ...prev, showLog: false } : prev)}
+                >
+                  Hide Log
+                </button>
+              )}
+
+              {genModal.phase === "complete" && genModal.generatedFiles.length === 1 && (
+                <div className="gen-modal-single">
+                  <img
+                    src={api.designImageUrl(genModal.designType, genModal.generatedFiles[0])}
+                    alt={genModal.generatedFiles[0]}
+                    className="gen-modal-single-img"
+                    onError={(e) => { e.currentTarget.style.display = "none"; }}
+                  />
+                  <div className="gen-modal-actions">
+                    <button
+                      className={`primary ${genModal.approvedFiles[genModal.generatedFiles[0]] === true ? "gen-modal-selected" : ""}`}
+                      onClick={() => handleModalApproval(genModal.designType, genModal.generatedFiles[0], true)}
+                    >
+                      Approve
+                    </button>
+                    <button
+                      className={`danger ${genModal.approvedFiles[genModal.generatedFiles[0]] === false ? "gen-modal-selected" : ""}`}
+                      onClick={() => handleModalApproval(genModal.designType, genModal.generatedFiles[0], false)}
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {genModal.phase === "complete" && genModal.generatedFiles.length > 1 && (
+                <div className="gen-modal-grid">
+                  {genModal.generatedFiles.map((filename) => {
+                    const state = genModal.approvedFiles[filename];
+                    const borderClass = state === true ? "gen-card-approved" : state === false ? "gen-card-rejected" : "";
+                    return (
+                      <div key={filename} className={`gen-modal-card ${borderClass}`}>
+                        <img
+                          src={api.designImageUrl(genModal.designType, filename)}
+                          alt={filename}
+                          className="gen-modal-card-img"
+                          onError={(e) => { e.currentTarget.style.display = "none"; }}
+                        />
+                        <div className="gen-modal-card-name">{filename}</div>
+                        <div className="gen-modal-actions">
+                          <button
+                            className={`primary ${state === true ? "gen-modal-selected" : ""}`}
+                            onClick={() => handleModalApproval(genModal.designType, filename, true)}
+                          >
+                            Approve
+                          </button>
+                          <button
+                            className={`danger ${state === false ? "gen-modal-selected" : ""}`}
+                            onClick={() => handleModalApproval(genModal.designType, filename, false)}
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
         )}
 
         {modalImage && (

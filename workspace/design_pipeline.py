@@ -78,10 +78,25 @@ DESIGN_THEMES = {
 }
 
 PALETTE_OPTIONS = [
+    # Original 4
     "black and cream, vintage wash",
     "off-white and charcoal, distressed texture",
     "forest green and ecru, military aesthetic",
     "washed black and bone white, faded streetwear",
+    # Streetwear extended
+    "navy blue and gold, luxury streetwear",
+    "burgundy and cream, vintage sport aesthetic",
+    "rust orange and sand, earth tone warmth",
+    "pure black and white, high contrast monochrome",
+    "olive drab and tan, utilitarian workwear",
+    "slate grey and neon green, tech streetwear",
+    # Broader / Front B friendly
+    "terracotta and ivory, warm bohemian",
+    "deep teal and warm cream, coastal vintage",
+    "dusty rose and charcoal, soft modern",
+    "mustard yellow and dark brown, retro 70s",
+    "lavender and slate, muted pastel",
+    "red and black, bold graphic",
 ]
 
 # ── Visual Styles (mixed into batches for variety) ────────────────
@@ -508,10 +523,12 @@ def render_huggingface(record, output_dir):
     Call Hugging Face free Inference API (SDXL) to render a design.
     Generates graphic/texture only — text is added by Pillow in a later stage.
     Saves PNG and returns filepath.
+    Returns "FALLBACK" (string) on 402 Payment Required so stage_render
+    can try Ideogram instead.
     """
     if not HF_API_TOKEN:
         print("  [SKIP] HF_API_TOKEN not set")
-        return None
+        return "FALLBACK"
 
     try:
         url = f"{HF_ROUTER}/{HF_MODEL}"
@@ -529,12 +546,19 @@ def render_huggingface(record, output_dir):
 
         resp = requests.post(url, headers=headers, json=payload, timeout=120)
 
+        if resp.status_code == 402:
+            print(f"  [WARN] HF credits exhausted (402) for {record['filename']} -- falling back to Ideogram")
+            return "FALLBACK"
+
         if resp.status_code == 503:
             # Model loading — wait and retry once
             wait = resp.json().get("estimated_time", 30)
             print(f"  [WAIT] Model loading, retrying in {int(wait)}s...")
             time.sleep(min(wait, 60))
             resp = requests.post(url, headers=headers, json=payload, timeout=120)
+            if resp.status_code == 402:
+                print(f"  [WARN] HF credits exhausted (402) -- falling back to Ideogram")
+                return "FALLBACK"
 
         resp.raise_for_status()
 
@@ -552,6 +576,83 @@ def render_huggingface(record, output_dir):
     except Exception as e:
         print(f"  [ERR] HF render failed for {record['filename']}: {e}")
         return None
+
+
+def stage_ideogram_text(records, designs_dir):
+    """
+    Stage 2b (Ideogram): Add text to HuggingFace-generated graphics
+    using Ideogram's remix API. Ideogram re-renders the design with
+    the text integrated — much higher quality than Pillow overlay.
+    Overwrites the original graphic with the text-composited version.
+    """
+    if not IDEOGRAM_API_KEY:
+        print("  [SKIP] IDEOGRAM_API_KEY not set — falling back to Pillow")
+        return records
+
+    composited = 0
+    for record in records:
+        text = record.get("_text_overlay", "")
+        if not text:
+            continue
+
+        filepath = record.get("_rendered_path")
+        if not filepath or not os.path.isfile(filepath):
+            filepath = os.path.join(designs_dir, record["filename"])
+        if not os.path.isfile(filepath):
+            continue
+
+        palette = record.get("color_palette", "black and cream, vintage wash")
+        style_label = record.get("style", "bold streetwear typography")
+
+        remix_prompt = (
+            f'Streetwear typography design for t-shirt print, '
+            f'{style_label}, add bold prominent text: "{text}", '
+            f'{palette} color palette, centered layout, '
+            f'vintage streetwear aesthetic, high contrast, clean edges, '
+            f'isolated on white background, t-shirt print ready'
+        )
+
+        try:
+            with open(filepath, "rb") as img_file:
+                response = requests.post(
+                    "https://api.ideogram.ai/remix",
+                    headers={"Api-Key": IDEOGRAM_API_KEY},
+                    files={
+                        "image_file": (
+                            record["filename"], img_file, "image/png"
+                        ),
+                    },
+                    data={
+                        "image_request": json.dumps({
+                            "prompt": remix_prompt,
+                            "model": "V_2_TURBO",
+                            "style_type": "DESIGN",
+                            "image_weight": 50,
+                            "negative_prompt": FRONT_A_NEGATIVE,
+                        }),
+                    },
+                    timeout=90,
+                )
+            response.raise_for_status()
+            image_url = response.json()["data"][0]["url"]
+
+            img_resp = requests.get(image_url, timeout=30)
+            img_resp.raise_for_status()
+
+            with open(filepath, "wb") as f:
+                f.write(img_resp.content)
+
+            record["_text_overlay"] = None
+            composited += 1
+            print(f"  [REMIX] Ideogram text added: {record['filename']} (~$0.05)")
+
+        except Exception as e:
+            print(f"  [ERR] Ideogram remix failed for {record['filename']}: {e}")
+            print(f"         Falling back to Pillow for this design.")
+
+    print(f"  [STAGE 2b] Ideogram text composited onto "
+          f"{composited}/{len(records)} designs")
+    return records
 
 
 def stage_text_overlay(records, designs_dir, font_path=None, font_size=None):
@@ -633,18 +734,28 @@ def stage_generate_prompts_b(phrases_csv=None, phrases=None,
 
 
 def stage_render(records, renderer, output_dir):
-    """Stage 2: Render images via API, auto-upscale to print resolution."""
+    """Stage 2: Render images via API, auto-upscale to print resolution.
+    If a renderer returns "FALLBACK", tries render_ideogram as fallback."""
     from inspect_designs import upscale_if_needed
     os.makedirs(output_dir, exist_ok=True)
     rendered = 0
+    fallback_count = 0
     for record in records:
+        record["_render_attempted"] = True
         filepath = renderer(record, output_dir)
-        if filepath:
+        if filepath == "FALLBACK":
+            filepath = render_ideogram(record, output_dir)
+            if filepath:
+                fallback_count += 1
+        if filepath and filepath != "FALLBACK":
             upscale_if_needed(filepath)
             record["_rendered_path"] = filepath
             rendered += 1
         time.sleep(1)  # respect rate limits
-    print(f"  [STAGE 2] Rendered {rendered}/{len(records)} images")
+    msg = f"  [STAGE 2] Rendered {rendered}/{len(records)} images"
+    if fallback_count:
+        msg += f" ({fallback_count} via Ideogram fallback)"
+    print(msg)
     return records
 
 
@@ -733,14 +844,21 @@ def stage_approve(records):
 
 
 def stage_output(records, output_path):
-    """Stage 6: Write pipeline JSON for update_workbooks.py ingestion."""
-    # Strip internal fields before output
+    """Stage 6: Write pipeline JSON for update_workbooks.py ingestion.
+    Skips records where rendering was attempted but failed (_render_attempted
+    is set by stage_render but _rendered_path is missing)."""
     clean_records = []
+    skipped = 0
     for record in records:
+        if record.get("_render_attempted") and not record.get("_rendered_path"):
+            skipped += 1
+            continue
         clean = {k: v for k, v in record.items()
                  if not k.startswith("_") and k not in
                  ("image_prompt", "negative_prompt", "color_palette")}
         clean_records.append(clean)
+    if skipped:
+        print(f"  [OUTPUT] Skipped {skipped} records with no rendered image")
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
@@ -783,6 +901,13 @@ def cmd_batch(args):
         print("  No records generated. Check inputs.")
         return
 
+    # Limit count if requested
+    if args.count and args.count > 0 and len(records) > args.count:
+        import random as _rnd
+        total = len(records)
+        records = _rnd.sample(records, args.count)
+        print(f"  [COUNT] Sampled {args.count} of {total} records")
+
     # Stage 2: Render (optional)
     if args.render:
         renderer = {"ideogram": render_ideogram,
@@ -791,12 +916,22 @@ def cmd_batch(args):
                     "hf": render_huggingface}.get(args.render)
         if renderer:
             records = stage_render(records, renderer, designs_dir)
-            # Stage 2b: Add text overlays onto rendered graphics
-            records = stage_text_overlay(
-                records, designs_dir,
-                font_path=args.font,
-                font_size=args.font_size,
-            )
+            # Stage 2b: Add text to rendered graphics
+            if not args.no_text_overlay:
+                if args.text_renderer == "ideogram":
+                    records = stage_ideogram_text(records, designs_dir)
+                    # Fallback: any designs that Ideogram didn't handle
+                    records = stage_text_overlay(
+                        records, designs_dir,
+                        font_path=args.font,
+                        font_size=args.font_size,
+                    )
+                else:
+                    records = stage_text_overlay(
+                        records, designs_dir,
+                        font_path=args.font,
+                        font_size=args.font_size,
+                    )
         else:
             print(f"  Unknown renderer: {args.render}")
 
@@ -898,6 +1033,84 @@ def cmd_process(args):
     stage_output(records, output_path)
 
 
+def cmd_variant(args):
+    """Generate a colorway variant of a single design with a different palette."""
+    import re
+    global _batch_filenames
+    _batch_filenames = set()
+    today = date.today().strftime("%Y%m%d")
+    palette = PALETTE_OPTIONS[args.palette % len(PALETTE_OPTIONS)]
+
+    # Strip file extension and numeric suffix to get base design name
+    clean_name = re.sub(r'(_\d{3})?\.png$', '', args.name)
+    clean_name = re.sub(r'_\d{3}$', '', clean_name)
+
+    if args.front == "A":
+        designs_dir = os.path.join(WORKSPACE, "front_a_sneaker", "designs")
+
+        # Find which theme this design belongs to
+        found_theme = None
+        for theme, names in DESIGN_THEMES.items():
+            if clean_name in names:
+                found_theme = theme
+                break
+
+        if not found_theme:
+            # Fallback: use design name as its own theme
+            found_theme = "variant"
+            print(f"  [WARN] '{clean_name}' not in DESIGN_THEMES, using fallback")
+
+        records = [build_sneaker_prompt(
+            clean_name, found_theme, palette,
+            args.drop or "DROP-01", designs_dir,
+        )]
+        log_name = f"front_a_variant_{today}.json"
+    else:
+        designs_dir = os.path.join(WORKSPACE, "front_b_general", "designs")
+        phrase = args.phrase or clean_name.replace("_", " ").title()
+        records = [build_general_prompt(
+            phrase,
+            args.niche or "General",
+            args.sub_niche or "General",
+            output_dir=designs_dir,
+        )]
+        log_name = f"front_b_variant_{today}.json"
+
+    if not records:
+        print("  No records generated.")
+        return
+
+    print(f"\n  Generating variant: {clean_name} with palette: {palette}\n")
+
+    # Render
+    if args.render:
+        renderer = {"ideogram": render_ideogram, "leonardo": render_leonardo,
+                    "huggingface": render_huggingface,
+                    "hf": render_huggingface}.get(args.render)
+        if renderer:
+            records = stage_render(records, renderer, designs_dir)
+            if not args.no_text_overlay:
+                if args.text_renderer == "ideogram":
+                    records = stage_ideogram_text(records, designs_dir)
+                    records = stage_text_overlay(
+                        records, designs_dir,
+                        font_path=args.font, font_size=args.font_size,
+                    )
+                else:
+                    records = stage_text_overlay(
+                        records, designs_dir,
+                        font_path=args.font, font_size=args.font_size,
+                    )
+
+    # Inspect + TM + Approve
+    records = stage_inspect(records, designs_dir)
+    records = stage_trademark(records, skip_api=args.skip_api)
+    records = stage_approve(records)
+
+    output_path = os.path.join(WORKSPACE, "logs", log_name)
+    stage_output(records, output_path)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="End-to-end design pipeline orchestrator"
@@ -910,7 +1123,7 @@ def main():
     batch.add_argument("--front", required=True, choices=["A", "B"])
     batch.add_argument("--drop", help="Drop ID for Front A (e.g. DROP-01)")
     batch.add_argument("--palette", type=int, default=0,
-                       help="Palette index 0-3 for Front A")
+                       help="Palette index 0-15 for color scheme")
     batch.add_argument("--phrases",
                        help="CSV file with phrases for Front B (one per line)")
     batch.add_argument("--niche", help="Niche name for Front B")
@@ -921,6 +1134,13 @@ def main():
     batch.add_argument("--font", help="Path to .ttf font for text overlay")
     batch.add_argument("--font-size", type=int, default=None,
                        help="Font size for text overlay (default: auto-fit)")
+    batch.add_argument("--text-renderer", choices=["pillow", "ideogram"],
+                       default="pillow",
+                       help="How to add text: pillow (local) or ideogram (remix API)")
+    batch.add_argument("--no-text-overlay", action="store_true",
+                       help="Skip text overlay entirely (graphic-only output)")
+    batch.add_argument("--count", type=int, default=0,
+                       help="Limit number of designs to generate (0 = all)")
     batch.add_argument("--skip-api", action="store_true",
                        help="Skip USPTO API (substring TM check only)")
 
@@ -936,12 +1156,36 @@ def main():
     proc.add_argument("--skip-api", action="store_true",
                       help="Skip USPTO API (substring TM check only)")
 
+    # ── variant: generate a colorway variant of a single design ──
+    var = sub.add_parser("variant",
+                         help="Generate a colorway variant of a single design")
+    var.add_argument("--front", required=True, choices=["A", "B"])
+    var.add_argument("--name", required=True,
+                     help="Design name (e.g. rotation_ready)")
+    var.add_argument("--palette", type=int, required=True,
+                     help="Palette index 0-3")
+    var.add_argument("--drop", help="Drop ID for Front A")
+    var.add_argument("--phrase", help="Phrase for Front B variant")
+    var.add_argument("--niche", help="Niche for Front B")
+    var.add_argument("--sub-niche", help="Sub-niche for Front B")
+    var.add_argument("--render",
+                     choices=["ideogram", "leonardo", "hf", "huggingface"],
+                     help="Render images via API")
+    var.add_argument("--text-renderer", choices=["pillow", "ideogram"],
+                     default="pillow")
+    var.add_argument("--no-text-overlay", action="store_true")
+    var.add_argument("--font", help="Path to .ttf font")
+    var.add_argument("--font-size", type=int, default=None)
+    var.add_argument("--skip-api", action="store_true")
+
     args = parser.parse_args()
 
     if args.command == "batch":
         cmd_batch(args)
     elif args.command == "process":
         cmd_process(args)
+    elif args.command == "variant":
+        cmd_variant(args)
     else:
         parser.print_help()
 

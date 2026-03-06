@@ -8,7 +8,15 @@
       "Bash(curl:*)",
       "WebSearch",
       "WebFetch(domain:ideogram.ai)",
-      "WebFetch(domain:docs.ideogram.ai)"
+      "WebFetch(domain:docs.ideogram.ai)",
+      "Bash(set:*)",
+      "Bash(rm:*)",
+      "Bash(tasklist:*)",
+      "WebFetch(domain:developers.printify.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.postman.com)",
+      "WebFetch(domain:bulk-pod-product-creator.com)",
+      "WebFetch(domain:help.printify.com)"
     ]
   }
 }

@@ -20,6 +20,7 @@ Setup:
        export PRINTIFY_SHOP_ID="your_shop_id_here"
 """
 
+import base64
 import os
 import sys
 import time
@@ -51,8 +52,38 @@ FRONT_CONFIG = {
         "sheet_name":   "Designs",
         "blueprint_id": 145,     # Unisex Heavy Blend Hoodie (Gildan 18500)
         "provider_id":  99,      # Monster Digital
-        "variant_ids":  [17396], # M / Black — add more for size/color matrix
-        "price_cents":  5499,    # $54.99
+        "variants": [
+            # Black: S–5XL
+            {"id": 38164, "size": "S"},
+            {"id": 38178, "size": "M"},
+            {"id": 38192, "size": "L"},
+            {"id": 38206, "size": "XL"},
+            {"id": 38220, "size": "2XL"},
+            {"id": 42122, "size": "3XL"},
+            {"id": 66213, "size": "4XL"},
+            {"id": 95180, "size": "5XL"},
+            # White: S–5XL
+            {"id": 38163, "size": "S"},
+            {"id": 38177, "size": "M"},
+            {"id": 38191, "size": "L"},
+            {"id": 38205, "size": "XL"},
+            {"id": 38219, "size": "2XL"},
+            {"id": 42120, "size": "3XL"},
+            {"id": 66211, "size": "4XL"},
+            {"id": 95175, "size": "5XL"},
+        ],
+        "base_cost_cents": 988,       # S–XL cost from Printify
+        "oversize_costs": {            # cost for larger sizes
+            "2XL": 1129, "3XL": 1248, "4XL": 1382, "5XL": 1502,
+        },
+        "shipping_cents": 399,         # US first-item shipping
+        "tags": [
+            "sneakerhead shirt", "sneaker collector tee", "streetwear graphic tee",
+            "sneaker culture", "hypebeast clothing", "rotation tee",
+            "sneaker lover gift", "kicks shirt", "sneakerhead gift",
+            "streetwear hoodie", "sneaker hoodie", "urban streetwear",
+            "sneaker graphic",
+        ],
         "title_template": (
             "{name} | Sneakerhead Tee | Sneaker Collector Shirt "
             "| Streetwear Graphic Tee | Gift for Sneaker Lover"
@@ -74,8 +105,37 @@ FRONT_CONFIG = {
         "sheet_name":   "Designs",
         "blueprint_id": 5,       # Unisex Softstyle T-Shirt (Gildan 64000)
         "provider_id":  99,
-        "variant_ids":  [4011],  # S / Black
-        "price_cents":  2499,    # $24.99
+        "variants": [
+            # Solid Black: S–5XL
+            {"id": 17427, "size": "S"},
+            {"id": 17428, "size": "M"},
+            {"id": 17429, "size": "L"},
+            {"id": 17430, "size": "XL"},
+            {"id": 17431, "size": "2XL"},
+            {"id": 17432, "size": "3XL"},
+            {"id": 17433, "size": "4XL"},
+            {"id": 101781, "size": "5XL"},
+            # Solid White: S–5XL
+            {"id": 17643, "size": "S"},
+            {"id": 17644, "size": "M"},
+            {"id": 17645, "size": "L"},
+            {"id": 17646, "size": "XL"},
+            {"id": 17647, "size": "2XL"},
+            {"id": 17648, "size": "3XL"},
+            {"id": 17649, "size": "4XL"},
+            {"id": 101810, "size": "5XL"},
+        ],
+        "base_cost_cents": 1163,      # S–XL cost from Printify
+        "oversize_costs": {
+            "2XL": 1409, "3XL": 1613, "4XL": 1796, "5XL": 1930,
+        },
+        "shipping_cents": 399,         # US first-item shipping
+        "tags": [
+            "graphic tee", "unique gift shirt", "funny tee", "quote shirt",
+            "trendy tee", "minimalist graphic", "gift for him", "gift for her",
+            "unisex tee", "casual shirt", "everyday tee", "cool graphic tee",
+            "statement tee",
+        ],
         "title_template": "{name} | Graphic Tee | Unique Gift",
         "description_template": (
             "A unique graphic tee perfect as a gift or for everyday wear.\n\n"
@@ -100,30 +160,62 @@ def check_config():
 
 
 def upload_image(filepath):
-    """Upload a design PNG to Printify. Returns the image ID."""
+    """Upload a design PNG to Printify via base64 JSON. Returns the image ID."""
     with open(filepath, "rb") as f:
-        resp = requests.post(
-            f"{BASE}/uploads/images.json",
-            headers=HEADERS,
-            files={"file": (os.path.basename(filepath), f, "image/png")},
-        )
+        contents = base64.b64encode(f.read()).decode("utf-8")
+    resp = requests.post(
+        f"{BASE}/uploads/images.json",
+        headers={**HEADERS, "Content-Type": "application/json"},
+        json={"file_name": os.path.basename(filepath), "contents": contents},
+    )
     resp.raise_for_status()
     return resp.json()["id"]
 
 
-def create_product(image_id, title, description, cfg):
+def calc_price(cost_cents, shipping_cents):
+    """40% profit margin including shipping: price = (cost + ship) / 0.60, rounded to .99"""
+    raw = (cost_cents + shipping_cents) / 0.60
+    dollars = int(raw / 100) + 1  # round up to next dollar
+    return dollars * 100 - 1      # e.g. $23.99 = 2399
+
+
+def create_product(image_id, title, description, cfg, design_name=None):
     """Create a product on Printify with the uploaded image. Returns product ID."""
+    # Build tags: base tags + dynamic from design name, capped at 13 (Etsy max)
+    base_tags = list(cfg.get("tags", []))
+    if design_name:
+        name_lower = design_name.lower().strip()
+        dynamic = [name_lower]
+        first_word = name_lower.split()[0] if name_lower.split() else None
+        if first_word:
+            dynamic.append(f"{first_word} tee")
+        for tag in dynamic:
+            if tag not in base_tags:
+                base_tags.append(tag)
+    tags = base_tags[:13]
+
+    # Build variants with calculated per-size pricing
+    base_cost = cfg["base_cost_cents"]
+    shipping = cfg["shipping_cents"]
+    oversize = cfg.get("oversize_costs", {})
+
+    variants = []
+    variant_ids = []
+    for v in cfg["variants"]:
+        cost = oversize.get(v["size"], base_cost)
+        price = calc_price(cost, shipping)
+        variants.append({"id": v["id"], "price": price, "is_enabled": True})
+        variant_ids.append(v["id"])
+
     payload = {
         "title": title,
         "description": description,
+        "tags": tags,
         "blueprint_id": cfg["blueprint_id"],
         "print_provider_id": cfg["provider_id"],
-        "variants": [
-            {"id": vid, "price": cfg["price_cents"], "is_enabled": True}
-            for vid in cfg["variant_ids"]
-        ],
+        "variants": variants,
         "print_areas": [{
-            "variant_ids": cfg["variant_ids"],
+            "variant_ids": variant_ids,
             "placeholders": [{
                 "position": "front",
                 "images": [{
@@ -248,7 +340,7 @@ def run_upload(front, draft=False, dry_run=False):
             print(f"  [1/3] Uploaded image: {filename} (id={image_id})")
 
             # Step 2: Create product
-            product_id = create_product(image_id, title, desc, cfg)
+            product_id = create_product(image_id, title, desc, cfg, design_name=base_name)
             print(f"  [2/3] Created product: {product_id}")
 
             # Step 3: Publish (unless draft mode for drops)

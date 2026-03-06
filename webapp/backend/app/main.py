@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import csv
-import io
 import json
 import os
 import random
@@ -26,6 +24,21 @@ from openpyxl import load_workbook
 
 BASE_DIR = Path(__file__).resolve().parents[3]
 WORKSPACE_DIR = BASE_DIR / "workspace"
+
+# Import Printify upload functions from workspace script
+sys.path.insert(0, str(WORKSPACE_DIR))
+try:
+    from printify_upload import (
+        upload_image as printify_upload_image,
+        create_product as printify_create_product,
+        publish_product as printify_publish_product,
+        update_spreadsheet_ids as printify_update_spreadsheet_ids,
+        FRONT_CONFIG as PRINTIFY_CONFIG,
+    )
+    _PRINTIFY_AVAILABLE = True
+except ImportError:
+    _PRINTIFY_AVAILABLE = False
+
 SPREADSHEETS_DIR = WORKSPACE_DIR / "spreadsheets"
 LOGS_DIR = WORKSPACE_DIR / "logs"
 DB_PATH = BASE_DIR / "webapp" / "backend" / "app" / "app_state.db"
@@ -64,16 +77,25 @@ app.add_middleware(
 
 
 class GenerationRequest(BaseModel):
-    mode: Literal["single", "batch"]
     designType: Literal["general", "sneaker"]
-    generationStyle: Literal["random", "detailed"] = "detailed"
-    randomVisualMode: Literal["mixed", "text_only", "text_plus_image"] = "mixed"
+    visualMode: Literal["random", "text_only", "graphic_text", "graphic_only"] = "random"
+    palette: int = 0
+    count: int = 0
     dropId: str | None = None
     phrase: str | None = None
     niche: str | None = None
     subNiche: str | None = None
-    style: str | None = None
-    render: Literal["ideogram", "leonardo", "hf", "huggingface"] | None = None
+    skipApi: bool = False
+
+
+class VariantRequest(BaseModel):
+    designType: Literal["general", "sneaker"]
+    designName: str
+    palette: int = 0
+    visualMode: Literal["text_only", "graphic_text", "graphic_only"] = "text_only"
+    phrase: str | None = None
+    niche: str | None = None
+    subNiche: str | None = None
     skipApi: bool = False
 
 
@@ -82,6 +104,12 @@ class ApprovalRequest(BaseModel):
     filename: str
     approved: bool
     notes: str | None = None
+
+
+class PrintifyUploadRequest(BaseModel):
+    designType: Literal["general", "sneaker"]
+    filename: str
+    draft: bool = False
 
 
 class ExpenseCreate(BaseModel):
@@ -145,7 +173,7 @@ def _build_random_phrase_samples(count: int) -> list[str]:
         token_pool.extend(re.findall(r"[A-Za-z]{3,}", text.lower()))
 
     token_pool = list({token for token in token_pool if len(token) >= 3})
-    if not token_pool:
+    if len(token_pool) < 3:
         token_pool = [
             "collectors",
             "street",
@@ -181,7 +209,6 @@ def _build_generation_options() -> dict[str, Any]:
 
     niches = _unique_values_from_sheet(niche_file, "Niches", "Niche")
     sub_niches = _unique_values_from_sheet(niche_file, "Niches", "Sub-Niche")
-    styles = _unique_values_from_sheet(design_b_file, "Designs", "Style")
     phrases = _get_phrase_bank()
     if not phrases:
         phrases = _unique_values_from_sheet(design_b_file, "Designs", "Phrase / Concept")
@@ -195,10 +222,8 @@ def _build_generation_options() -> dict[str, Any]:
         "general": {
             "niches": niches,
             "subNiches": sub_niches,
-            "styles": styles or ["minimalist line art"],
             "phrases": phrases[:200],
         },
-        "renderers": ["hf", "ideogram", "leonardo"],
     }
 
 
@@ -226,6 +251,13 @@ def _ensure_db() -> None:
             """
         )
         con.commit()
+    # Migration: add generated_files column
+    with sqlite3.connect(DB_PATH) as con:
+        try:
+            con.execute("ALTER TABLE jobs ADD COLUMN generated_files TEXT")
+            con.commit()
+        except sqlite3.OperationalError:
+            pass  # Column already exists
 
 
 @contextmanager
@@ -275,6 +307,9 @@ def _read_design_rows(design_type: str) -> list[dict[str, Any]]:
             "approved": ws.cell(row=row, column=headers.get("Approved?", 12)).value,
             "status": ws.cell(row=row, column=headers.get("Status", ws.max_column)).value,
             "rowNumber": row,
+            "printifyImageId": ws.cell(row=row, column=headers["Printify Image ID"]).value if "Printify Image ID" in headers else None,
+            "printifyProductId": ws.cell(row=row, column=headers["Printify Product ID"]).value if "Printify Product ID" in headers else None,
+            "etsyListingId": ws.cell(row=row, column=headers["Etsy Listing ID"]).value if "Etsy Listing ID" in headers else None,
         }
         rows.append(row_data)
 
@@ -472,10 +507,11 @@ def _delete_expense(expense_id: str) -> None:
 
 
 def _insert_job(job_id: str, payload: GenerationRequest) -> None:
+    mode = "single" if (payload.designType == "general" and payload.phrase) else "batch"
     with _db() as con:
         con.execute(
             "INSERT INTO jobs (id, kind, design_type, mode, status, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (job_id, "generation", payload.designType, payload.mode, "queued", payload.model_dump_json(), _now_iso()),
+            (job_id, "generation", payload.designType, mode, "queued", payload.model_dump_json(), _now_iso()),
         )
         con.commit()
 
@@ -512,56 +548,55 @@ def _run_generation_job(job_id: str, payload: GenerationRequest) -> None:
 
     temp_phrase_file: Path | None = None
     try:
-        selected_render = payload.render
+        # Resolve visual mode → renderer + text overlay behavior
+        # text_only    → Ideogram renders complete design with text in one shot
+        # graphic_text → HuggingFace (graphic) + Ideogram remix (adds text)
+        # graphic_only → HuggingFace (graphic), no text overlay
+        visual = payload.visualMode
+        if visual == "random":
+            visual = random.choice(["text_only", "graphic_text", "graphic_only"])
 
-        if payload.generationStyle == "random":
-            if payload.randomVisualMode == "text_only":
-                selected_render = None
-            elif payload.randomVisualMode == "text_plus_image":
-                selected_render = selected_render or "hf"
-            else:
-                selected_render = selected_render or random.choice([None, "hf"])
+        if visual == "text_only":
+            selected_render = "ideogram"
+        else:
+            selected_render = "hf"
 
-            if front_code == "A":
-                drop_ids = _get_drop_ids()
-                command.extend(["--drop", random.choice(drop_ids)])
+        # Design count: 0 means "all" (pipeline default)
+        desired_count = payload.count if payload.count > 0 else 0
+
+        if front_code == "A":
+            command.extend(["--drop", payload.dropId or "DROP-01"])
+            command.extend(["--palette", str(payload.palette)])
+        else:
+            if payload.phrase:
+                temp_phrase_file = Path(tempfile.gettempdir()) / f"pod_phrase_{uuid.uuid4().hex}.csv"
+                temp_phrase_file.write_text(payload.phrase + "\n", encoding="utf-8")
+                command.extend(["--phrases", str(temp_phrase_file)])
             else:
-                phrase_count = 1 if payload.mode == "single" else 8
+                # Auto-generate phrase batch when no phrase provided
+                phrase_count = desired_count if desired_count > 0 else 8
                 phrases = _build_random_phrase_samples(phrase_count)
                 temp_phrase_file = Path(tempfile.gettempdir()) / f"pod_phrase_{uuid.uuid4().hex}.csv"
                 temp_phrase_file.write_text("\n".join(phrases) + "\n", encoding="utf-8")
                 command.extend(["--phrases", str(temp_phrase_file)])
 
-                opts = _build_generation_options().get("general", {})
-                command.extend(["--niche", random.choice(opts.get("niches") or ["General"])])
-                command.extend(["--sub-niche", random.choice(opts.get("subNiches") or ["General"])])
-                command.extend(["--style", random.choice(opts.get("styles") or ["minimalist line art"])])
-
-        else:
-            if front_code == "A":
-                if payload.dropId:
-                    command.extend(["--drop", payload.dropId])
+            opts = _build_generation_options().get("general", {})
+            if payload.niche:
+                command.extend(["--niche", payload.niche])
             else:
-                if payload.mode == "single":
-                    if not payload.phrase:
-                        raise ValueError("Single general generation requires phrase")
-                    temp_phrase_file = Path(tempfile.gettempdir()) / f"pod_phrase_{uuid.uuid4().hex}.csv"
-                    temp_phrase_file.write_text(payload.phrase + "\n", encoding="utf-8")
-                    command.extend(["--phrases", str(temp_phrase_file)])
-                elif payload.phrase:
-                    temp_phrase_file = Path(tempfile.gettempdir()) / f"pod_phrase_{uuid.uuid4().hex}.csv"
-                    temp_phrase_file.write_text(payload.phrase + "\n", encoding="utf-8")
-                    command.extend(["--phrases", str(temp_phrase_file)])
+                command.extend(["--niche", random.choice(opts.get("niches") or ["General"])])
+            if payload.subNiche:
+                command.extend(["--sub-niche", payload.subNiche])
+            else:
+                command.extend(["--sub-niche", random.choice(opts.get("subNiches") or ["General"])])
 
-                if payload.niche:
-                    command.extend(["--niche", payload.niche])
-                if payload.subNiche:
-                    command.extend(["--sub-niche", payload.subNiche])
-                if payload.style:
-                    command.extend(["--style", payload.style])
-
-        if selected_render:
-            command.extend(["--render", selected_render])
+        if desired_count > 0:
+            command.extend(["--count", str(desired_count)])
+        command.extend(["--render", selected_render])
+        if visual == "graphic_text":
+            command.extend(["--text-renderer", "ideogram"])
+        elif visual == "graphic_only":
+            command.append("--no-text-overlay")
         if payload.skipApi:
             command.append("--skip-api")
 
@@ -595,9 +630,21 @@ def _run_generation_job(job_id: str, payload: GenerationRequest) -> None:
             output += "\n\n--- Workbook Sync ---\n"
             output += (sync.stdout or "") + "\n" + (sync.stderr or "")
 
-        _update_job(job_id, status="success", finished_at=_now_iso(), output=output)
+        generated_files_json = "[]"
+        if latest_log and latest_log.exists():
+            try:
+                log_data = json.loads(latest_log.read_text(encoding="utf-8"))
+                if isinstance(log_data, list):
+                    filenames = [r["filename"] for r in log_data if r.get("filename")]
+                    generated_files_json = json.dumps(filenames)
+            except Exception:
+                pass
+
+        _update_job(job_id, status="success", finished_at=_now_iso(), output=output, generated_files=generated_files_json)
     except Exception as exc:
-        _update_job(job_id, status="failed", finished_at=_now_iso(), output=str(exc))
+        import traceback
+        tb = traceback.format_exc()
+        _update_job(job_id, status="failed", finished_at=_now_iso(), output=f"{exc}\n\n{tb}")
     finally:
         if temp_phrase_file and temp_phrase_file.exists():
             temp_phrase_file.unlink(missing_ok=True)
@@ -674,6 +721,18 @@ def list_jobs() -> dict[str, Any]:
     return {"items": items}
 
 
+@app.get("/api/jobs/{job_id}")
+def get_job(job_id: str) -> dict[str, Any]:
+    with _db() as con:
+        row = con.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    item = dict(row)
+    raw = item.get("generated_files")
+    item["generated_files"] = json.loads(raw) if raw else []
+    return item
+
+
 @app.get("/api/designs/image")
 def get_design_image(
     designType: Literal["general", "sneaker"] = Query(...),
@@ -692,14 +751,6 @@ def get_design_image(
 
 @app.post("/api/generate")
 def start_generation(payload: GenerationRequest) -> dict[str, Any]:
-    if (
-        payload.generationStyle == "detailed"
-        and payload.mode == "single"
-        and payload.designType == "general"
-        and not (payload.phrase or "").strip()
-    ):
-        raise HTTPException(status_code=422, detail="Single general generation requires phrase")
-
     job_id = uuid.uuid4().hex
     _insert_job(job_id, payload)
 
@@ -712,6 +763,94 @@ def start_generation(payload: GenerationRequest) -> dict[str, Any]:
 @app.get("/api/generation/options")
 def generation_options() -> dict[str, Any]:
     return _build_generation_options()
+
+
+@app.post("/api/designs/variant")
+def generate_variant(payload: VariantRequest) -> dict[str, Any]:
+    job_id = uuid.uuid4().hex
+    with _db() as con:
+        con.execute(
+            "INSERT INTO jobs (id, kind, design_type, mode, status, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (job_id, "variant", payload.designType, "single", "queued", payload.model_dump_json(), _now_iso()),
+        )
+        con.commit()
+
+    thread = threading.Thread(target=_run_variant_job, args=(job_id, payload), daemon=True)
+    thread.start()
+
+    return {"jobId": job_id, "status": "queued"}
+
+
+def _run_variant_job(job_id: str, payload: VariantRequest) -> None:
+    _update_job(job_id, status="running", started_at=_now_iso())
+    cfg = FRONT_CONFIG[payload.designType]
+    front_code = cfg["code"]
+
+    command = [
+        sys.executable,
+        str(WORKSPACE_DIR / "design_pipeline.py"),
+        "variant",
+        "--front", front_code,
+        "--name", payload.designName,
+        "--palette", str(payload.palette),
+    ]
+
+    try:
+        visual = payload.visualMode
+        if visual == "text_only":
+            selected_render = "ideogram"
+        else:
+            selected_render = "hf"
+
+        if front_code == "B":
+            if payload.phrase:
+                command.extend(["--phrase", payload.phrase])
+            if payload.niche:
+                command.extend(["--niche", payload.niche])
+            if payload.subNiche:
+                command.extend(["--sub-niche", payload.subNiche])
+
+        command.extend(["--render", selected_render])
+        if visual == "graphic_text":
+            command.extend(["--text-renderer", "ideogram"])
+        elif visual == "graphic_only":
+            command.append("--no-text-overlay")
+        if payload.skipApi:
+            command.append("--skip-api")
+
+        run = subprocess.run(
+            command, cwd=str(WORKSPACE_DIR),
+            capture_output=True, text=True,
+        )
+        output = (run.stdout or "") + "\n" + (run.stderr or "")
+
+        if run.returncode != 0:
+            _update_job(job_id, status="failed", finished_at=_now_iso(), output=output)
+            return
+
+        latest_log = _latest_log_for_front(front_code)
+        if latest_log:
+            sync = subprocess.run(
+                [sys.executable, str(WORKSPACE_DIR / "update_workbooks.py"),
+                 "--log", str(latest_log), "--front", front_code],
+                cwd=str(WORKSPACE_DIR), capture_output=True, text=True,
+            )
+            output += "\n\n--- Workbook Sync ---\n"
+            output += (sync.stdout or "") + "\n" + (sync.stderr or "")
+
+        generated_files_json = "[]"
+        if latest_log and latest_log.exists():
+            try:
+                log_data = json.loads(latest_log.read_text(encoding="utf-8"))
+                if isinstance(log_data, list):
+                    filenames = [r["filename"] for r in log_data if r.get("filename")]
+                    generated_files_json = json.dumps(filenames)
+            except Exception:
+                pass
+
+        _update_job(job_id, status="success", finished_at=_now_iso(), output=output, generated_files=generated_files_json)
+    except Exception as exc:
+        _update_job(job_id, status="failed", finished_at=_now_iso(), output=str(exc))
 
 
 @app.post("/api/approvals")
@@ -765,3 +904,80 @@ def update_expense(expense_id: str, payload: ExpenseCreate) -> dict[str, Any]:
 def delete_expense(expense_id: str) -> dict[str, Any]:
     _delete_expense(expense_id)
     return {"deleted": True}
+
+
+@app.get("/api/printify/status")
+def printify_status() -> dict[str, Any]:
+    has_token = bool(os.environ.get("PRINTIFY_TOKEN"))
+    has_shop_id = bool(os.environ.get("PRINTIFY_SHOP_ID"))
+    return {
+        "configured": _PRINTIFY_AVAILABLE and has_token and has_shop_id,
+        "hasToken": has_token,
+        "hasShopId": has_shop_id,
+    }
+
+
+@app.post("/api/printify/upload")
+def printify_upload(payload: PrintifyUploadRequest) -> dict[str, Any]:
+    if not _PRINTIFY_AVAILABLE:
+        raise HTTPException(status_code=500, detail="printify_upload module not available")
+
+    token = os.environ.get("PRINTIFY_TOKEN")
+    shop_id = os.environ.get("PRINTIFY_SHOP_ID")
+    if not token or not shop_id:
+        raise HTTPException(status_code=500, detail="PRINTIFY_TOKEN or PRINTIFY_SHOP_ID not configured")
+
+    cfg = FRONT_CONFIG[payload.designType]
+    filepath = cfg["approved_folder"] / payload.filename
+    if not filepath.exists():
+        raise HTTPException(status_code=400, detail="Design not found in approved folder. Only approved designs can be uploaded.")
+
+    front_code = cfg["code"]
+    printify_cfg = PRINTIFY_CONFIG[front_code]
+    base_name = filepath.stem.replace("_", " ").title()
+    title = printify_cfg["title_template"].format(name=base_name)
+    description = printify_cfg["description_template"]
+
+    try:
+        image_id = printify_upload_image(str(filepath))
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Printify image upload failed: {exc}")
+
+    try:
+        product_id = printify_create_product(image_id, title, description, printify_cfg, design_name=base_name)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Printify product creation failed: {exc}")
+
+    status = "Draft on Printify"
+    if not payload.draft:
+        try:
+            printify_publish_product(product_id)
+            status = "Published"
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"Printify publish failed (product {product_id} created but not published): {exc}")
+
+    try:
+        printify_update_spreadsheet_ids(
+            str(cfg["spreadsheet"]),
+            "Designs",
+            payload.filename,
+            image_id=image_id,
+            product_id=product_id,
+            status=status,
+        )
+    except Exception as exc:
+        # Product was uploaded successfully, just spreadsheet update failed — still return success
+        return {
+            "filename": payload.filename,
+            "imageId": image_id,
+            "productId": product_id,
+            "status": status,
+            "warning": f"Spreadsheet update failed: {exc}",
+        }
+
+    return {
+        "filename": payload.filename,
+        "imageId": image_id,
+        "productId": product_id,
+        "status": status,
+    }
