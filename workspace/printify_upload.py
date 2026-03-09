@@ -113,13 +113,19 @@ FRONT_CONFIG = {
             "tshirt": {
                 **_TSHIRT_PRODUCT,
                 "tags": [
-                    "sneakerhead shirt", "sneaker collector tee",
-                    "streetwear graphic tee", "sneaker culture tshirt",
-                    "rotationclub tee", "sneaker lover gift for him",
-                    "kicks and culture shirt", "sneakerhead birthday gift",
-                    "sneaker dad gift", "hypebeast graphic tee",
-                    "sneaker collector gift", "streetwear tee for men",
-                    "sneakerhead christmas gift",
+                    "sneakerhead shirt",     # 17
+                    "sneaker collector",      # 17
+                    "streetwear tee",         # 14
+                    "sneaker culture tee",    # 19
+                    "rotationclub tee",       # 16
+                    "sneaker lover gift",     # 18
+                    "kicks and culture",      # 17
+                    "sneakerhead gift",       # 16
+                    "sneaker dad gift",       # 16
+                    "hypebeast tee",          # 13
+                    "sneaker gift idea",      # 17
+                    "streetwear for men",     # 18
+                    "graphic tee for him",    # 19
                 ],
                 "title_template": (
                     "{name} Sneakerhead Shirt | Sneaker Culture Graphic Tee "
@@ -144,13 +150,19 @@ FRONT_CONFIG = {
             "hoodie": {
                 **_HOODIE_PRODUCT,
                 "tags": [
-                    "sneakerhead hoodie", "sneaker collector hoodie",
-                    "streetwear graphic hoodie", "sneaker culture hoodie",
-                    "rotationclub hoodie", "sneaker lover gift for him",
-                    "kicks and culture hoodie", "sneakerhead birthday gift",
-                    "sneaker dad gift", "hypebeast hoodie",
-                    "sneaker collector gift", "streetwear hoodie for men",
-                    "sneakerhead christmas gift",
+                    "sneakerhead hoodie",     # 18
+                    "sneaker collector",       # 17
+                    "streetwear hoodie",       # 17
+                    "sneaker culture",         # 15
+                    "rotationclub hoodie",     # 19
+                    "sneaker lover gift",      # 18
+                    "kicks and culture",       # 17
+                    "sneakerhead gift",        # 16
+                    "sneaker dad gift",        # 16
+                    "hypebeast hoodie",        # 16
+                    "sneaker gift idea",       # 17
+                    "streetwear for men",      # 18
+                    "graphic hoodie",          # 14
                 ],
                 "title_template": (
                     "{name} Sneakerhead Hoodie | Sneaker Culture Graphic Hoodie "
@@ -183,13 +195,19 @@ FRONT_CONFIG = {
             "tshirt": {
                 **_TSHIRT_PRODUCT,
                 "tags": [
-                    "graphic tee for men", "unique gift shirt for him",
-                    "funny quote tee", "trendy graphic tshirt",
-                    "minimalist graphic tee", "gift for boyfriend",
-                    "cool statement shirt", "unisex graphic tee",
-                    "birthday gift for him", "casual everyday tee",
-                    "aesthetic graphic shirt", "gift for best friend",
-                    "sarcastic quote tee",
+                    "graphic tee men",        # 15
+                    "unique gift shirt",       # 17
+                    "funny quote tee",         # 15
+                    "trendy graphic tee",      # 18
+                    "minimalist tee",          # 14
+                    "gift for boyfriend",      # 18
+                    "cool statement tee",      # 18
+                    "unisex graphic tee",      # 18
+                    "birthday gift him",       # 17
+                    "casual everyday tee",     # 19
+                    "aesthetic shirt",          # 15
+                    "gift best friend",        # 16
+                    "sarcastic quote tee",     # 19
                 ],
                 "title_template": (
                     "{name} Graphic Tee | Unique Gift for Him "
@@ -211,13 +229,19 @@ FRONT_CONFIG = {
             "hoodie": {
                 **_HOODIE_PRODUCT,
                 "tags": [
-                    "graphic hoodie for men", "unique gift hoodie for him",
-                    "funny quote hoodie", "trendy graphic hoodie",
-                    "minimalist graphic hoodie", "gift for boyfriend",
-                    "cool statement hoodie", "unisex graphic hoodie",
-                    "birthday gift for him", "casual everyday hoodie",
-                    "aesthetic graphic hoodie", "gift for best friend",
-                    "sarcastic quote hoodie",
+                    "graphic hoodie men",      # 18
+                    "unique gift hoodie",       # 18
+                    "funny quote hoodie",       # 18
+                    "trendy hoodie",            # 13
+                    "minimalist hoodie",        # 17
+                    "gift for boyfriend",       # 18
+                    "cool statement hood",      # 19
+                    "unisex hoodie",            # 13
+                    "birthday gift him",        # 17
+                    "casual hoodie",            # 13
+                    "aesthetic hoodie",          # 16
+                    "gift best friend",         # 16
+                    "sarcastic hoodie",         # 16
                 ],
                 "title_template": (
                     "{name} Graphic Hoodie | Unique Gift for Him "
@@ -287,7 +311,7 @@ def create_product(image_id, title, description, cfg, design_name=None):
         for tag in dynamic:
             if tag not in base_tags:
                 base_tags.append(tag)
-    tags = base_tags[:13]
+    tags = [t[:20] for t in base_tags[:13]]  # Etsy max 20 chars per tag
 
     # Build variants with calculated per-size pricing
     base_cost = cfg["base_cost_cents"]
@@ -597,6 +621,7 @@ def run_update(front, product_type="tshirt", republish=False, dry_run=False):
             dynamic.append(f"{first_word} tee" if product_type == "tshirt"
                            else f"{first_word} hoodie")
         for tag in dynamic:
+            tag = tag[:20]  # Etsy max 20 chars per tag
             if tag not in tags:
                 tags.append(tag)
         tags = tags[:13]
