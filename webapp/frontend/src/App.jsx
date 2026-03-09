@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
+import PinterestTab from "./pinterest/PinterestTab";
+import EtsySetup from "./etsy/EtsySetup";
 
 const NAV_ITEMS = [
   "Dashboard",
@@ -7,6 +9,8 @@ const NAV_ITEMS = [
   "Generate",
   "Expenses",
   "Jobs",
+  "Etsy",
+  "Pinterest",
 ];
 
 const initialGeneration = {
@@ -19,6 +23,9 @@ const initialGeneration = {
   niche: "",
   subNiche: "",
   skipApi: false,
+  openaiHd: false,
+  gptQuality: "medium",
+  promptHint: "",
 };
 
 const COUNT_OPTIONS = [
@@ -57,6 +64,14 @@ const VISUAL_MODE_HINTS = {
     "HuggingFace generates the graphic, then Ideogram adds text via remix. Two-step pipeline for best quality.",
   graphic_only:
     "HuggingFace generates a standalone graphic/illustration with no text overlay.",
+  text_only_openai:
+    "OpenAI DALL-E 3 renders the complete design — graphic + text in one shot (~$0.04/image, ~$0.08 HD).",
+  graphic_openai:
+    "OpenAI DALL-E 3 generates a standalone graphic/illustration with no text (~$0.04/image, ~$0.08 HD).",
+  text_gpt_image:
+    "GPT Image 1 renders complete design with text — native transparent bg, ~98% text accuracy (~$0.02 low / ~$0.06 med / ~$0.26 high).",
+  graphic_gpt_image:
+    "GPT Image 1 generates graphic only, no text — native transparent bg (~$0.02 low / ~$0.06 med / ~$0.26 high).",
 };
 
 const initialExpense = {
@@ -80,6 +95,7 @@ function statusClass(status) {
 
 export function App() {
   const [tab, setTab] = useState("Dashboard");
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [summary, setSummary] = useState(null);
@@ -93,6 +109,7 @@ export function App() {
     designType: "",
     status: "all",
   });
+  const [designSubTab, setDesignSubTab] = useState("pipeline");
   const [modalState, setModalState] = useState(null);
   const [variantForm, setVariantForm] = useState(null);
   const [selectedJobLog, setSelectedJobLog] = useState(null);
@@ -136,7 +153,10 @@ export function App() {
   }, [loadAll]);
 
   useEffect(() => {
-    api.printifyStatus().then((res) => setPrintifyConfigured(res.configured)).catch(() => {});
+    api
+      .printifyStatus()
+      .then((res) => setPrintifyConfigured(res.configured))
+      .catch(() => {});
   }, []);
 
   const handlePrintifyUpload = async (designType, filename) => {
@@ -153,7 +173,9 @@ export function App() {
   };
 
   // Auto-poll: 3s when a job is running/queued, 30s otherwise
-  const hasActiveJob = jobs.some((j) => j.status === "running" || j.status === "queued");
+  const hasActiveJob = jobs.some(
+    (j) => j.status === "running" || j.status === "queued",
+  );
   const pollInterval = hasActiveJob ? 3000 : 30000;
 
   useEffect(() => {
@@ -168,14 +190,18 @@ export function App() {
         item.designType !== designFilters.designType
       )
         return false;
-      if (
-        designFilters.status !== "all" &&
-        item.location !== designFilters.status
-      )
-        return false;
+      if (designSubTab === "pipeline") {
+        if (item.location !== "generated") return false;
+      } else if (designSubTab === "approved") {
+        if (item.location !== "approved" || item.printifyProductId) return false;
+      } else if (designSubTab === "published") {
+        if (!item.printifyProductId) return false;
+      } else if (designSubTab === "rejected") {
+        if (item.location !== "rejected") return false;
+      }
       return true;
     });
-  }, [designs, designFilters]);
+  }, [designs, designFilters, designSubTab]);
 
   const handleGenerate = async (e) => {
     e.preventDefault();
@@ -191,11 +217,20 @@ export function App() {
         niche: generationForm.niche || null,
         subNiche: generationForm.subNiche || null,
         skipApi: generationForm.skipApi,
+        openaiHd: generationForm.openaiHd,
+        gptQuality: generationForm.gptQuality,
+        promptHint: generationForm.promptHint,
       };
       const result = await api.generate(payload);
       setGenModal({
-        jobId: result.jobId, phase: "generating", output: "", status: "queued",
-        generatedFiles: [], designType: payload.designType, showLog: true, approvedFiles: {},
+        jobId: result.jobId,
+        phase: "generating",
+        output: "",
+        status: "queued",
+        generatedFiles: [],
+        designType: payload.designType,
+        showLog: true,
+        approvedFiles: {},
       });
     } catch (err) {
       setError(err.message);
@@ -216,12 +251,21 @@ export function App() {
         niche: variantForm.niche || null,
         subNiche: variantForm.subNiche || null,
         skipApi: false,
+        openaiHd: variantForm.openaiHd || false,
+        gptQuality: variantForm.gptQuality || "medium",
+        promptHint: variantForm.promptHint || "",
       };
       const result = await api.variant(payload);
       setVariantForm(null);
       setGenModal({
-        jobId: result.jobId, phase: "generating", output: "", status: "queued",
-        generatedFiles: [], designType: payload.designType, showLog: true, approvedFiles: {},
+        jobId: result.jobId,
+        phase: "generating",
+        output: "",
+        status: "queued",
+        generatedFiles: [],
+        designType: payload.designType,
+        showLog: true,
+        approvedFiles: {},
       });
     } catch (err) {
       setError(err.message);
@@ -384,7 +428,11 @@ export function App() {
             output: data.output || "",
             status: data.status,
             generatedFiles: data.generated_files || [],
-            phase: terminal ? (data.status === "success" ? "complete" : "failed") : "generating",
+            phase: terminal
+              ? data.status === "success"
+                ? "complete"
+                : "failed"
+              : "generating",
           };
         });
         if (terminal) loadAll(true);
@@ -394,7 +442,10 @@ export function App() {
     };
     poll();
     const timer = setInterval(poll, 2000);
-    return () => { cancelled = true; clearInterval(timer); };
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
   }, [genModal?.jobId, genModal?.phase, loadAll]);
 
   // Auto-scroll gen modal log
@@ -428,7 +479,9 @@ export function App() {
   // Escape key for gen modal
   useEffect(() => {
     if (!genModal) return;
-    const onKey = (e) => { if (e.key === "Escape") closeGenModal(); };
+    const onKey = (e) => {
+      if (e.key === "Escape") closeGenModal();
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [genModal]);
@@ -437,15 +490,29 @@ export function App() {
     ? modalState.items[modalState.index] || null
     : null;
 
+  const handleTabSelect = (item) => {
+    setTab(item);
+    setMobileNavOpen(false);
+  };
+
   return (
     <div className="app">
-      <aside className="sidebar">
+      {mobileNavOpen && (
+        <button
+          type="button"
+          className="mobile-nav-backdrop"
+          aria-label="Close navigation"
+          onClick={() => setMobileNavOpen(false)}
+        />
+      )}
+
+      <aside className={`sidebar ${mobileNavOpen ? "open" : ""}`}>
         <div className="brand">POD Control Center</div>
         {NAV_ITEMS.map((item) => (
           <button
             key={item}
             className={`nav-item ${tab === item ? "active" : ""}`}
-            onClick={() => setTab(item)}
+            onClick={() => handleTabSelect(item)}
           >
             {item}
           </button>
@@ -453,7 +520,17 @@ export function App() {
       </aside>
       <main className="main">
         <div className="topbar">
-          <h1 style={{ margin: 0 }}>{tab}</h1>
+          <div className="topbar-left">
+            <button
+              type="button"
+              className="mobile-nav-toggle"
+              aria-label="Open navigation"
+              onClick={() => setMobileNavOpen(true)}
+            >
+              ☰
+            </button>
+            <h1 style={{ margin: 0 }}>{tab}</h1>
+          </div>
           <div className="row">
             <button onClick={loadAll}>Refresh</button>
             {loading && <span>Loading...</span>}
@@ -518,7 +595,31 @@ export function App() {
 
         {tab === "Designs" && (
           <>
-            <div className="row">
+            <div className="sub-tabs">
+              {[
+                { id: "pipeline", label: "Pipeline" },
+                { id: "approved", label: "Approved" },
+                { id: "published", label: "Published" },
+                { id: "rejected", label: "Rejected" },
+              ].map((t) => (
+                <button
+                  key={t.id}
+                  className={`sub-tab${designSubTab === t.id ? " active" : ""}`}
+                  onClick={() => setDesignSubTab(t.id)}
+                >
+                  {t.label}
+                  <span className="sub-tab-count">
+                    {designs.filter((d) => {
+                      if (designFilters.designType && d.designType !== designFilters.designType) return false;
+                      if (t.id === "pipeline") return d.location === "generated";
+                      if (t.id === "approved") return d.location === "approved" && !d.printifyProductId;
+                      if (t.id === "published") return !!d.printifyProductId;
+                      if (t.id === "rejected") return d.location === "rejected";
+                      return false;
+                    }).length}
+                  </span>
+                </button>
+              ))}
               <select
                 value={designFilters.designType}
                 onChange={(e) =>
@@ -527,32 +628,20 @@ export function App() {
                     designType: e.target.value,
                   }))
                 }
+                style={{ marginLeft: "auto" }}
               >
                 <option value="">All Types</option>
                 <option value="sneaker">Sneaker</option>
                 <option value="general">General</option>
               </select>
-              <select
-                value={designFilters.status}
-                onChange={(e) =>
-                  setDesignFilters((old) => ({
-                    ...old,
-                    status: e.target.value,
-                  }))
-                }
-              >
-                <option value="all">All Status</option>
-                <option value="generated">Generated</option>
-                <option value="approved">Approved</option>
-                <option value="rejected">Rejected</option>
-              </select>
             </div>
             <div className="table-wrap">
-              <table>
+              <table className="designs-table">
                 <thead>
                   <tr>
                     <th>Preview</th>
                     <th>Filename</th>
+                    <th>Created</th>
                     <th>Type</th>
                     <th>Name/Phrase</th>
                     <th>IP Risk</th>
@@ -591,7 +680,15 @@ export function App() {
                           <span className="thumb-empty">No image</span>
                         )}
                       </td>
-                      <td>{item.filename}</td>
+                      <td>
+                        {item.filename}
+                        {item.legacy ? (
+                          <span className="badge legacy">Legacy</span>
+                        ) : (
+                          <span className="badge new-gen">New</span>
+                        )}
+                      </td>
+                      <td className="date-cell">{item.createdAt || "-"}</td>
                       <td>{item.designType}</td>
                       <td>{item.name || item.phrase || "-"}</td>
                       <td>{item.ipRisk || "-"}</td>
@@ -603,7 +700,31 @@ export function App() {
                       <td>{item.status || "-"}</td>
                       <td>
                         {item.printifyProductId ? (
-                          <span className="badge approved">Published</span>
+                          <div className="link-stack">
+                            <span className="badge approved">Published</span>
+                            {item.printifyUrl && (
+                              <a
+                                href={item.printifyUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="table-link"
+                              >
+                                Printify
+                              </a>
+                            )}
+                            {item.etsyUrl ? (
+                              <a
+                                href={item.etsyUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="table-link"
+                              >
+                                Etsy
+                              </a>
+                            ) : (
+                              <span className="table-note">Etsy pending</span>
+                            )}
+                          </div>
                         ) : item.location === "approved" ? (
                           <span className="badge generated">Ready</span>
                         ) : (
@@ -615,7 +736,11 @@ export function App() {
                           <button
                             className="primary"
                             onClick={() =>
-                              updateApproval(item.designType, item.filename, true)
+                              updateApproval(
+                                item.designType,
+                                item.filename,
+                                true,
+                              )
                             }
                           >
                             Approve
@@ -721,7 +846,60 @@ export function App() {
                     <option value="graphic_only">
                       Graphic Only (HuggingFace)
                     </option>
+                    <option value="text_only_openai">
+                      Graphic + Text (OpenAI DALL-E 3)
+                    </option>
+                    <option value="graphic_openai">
+                      Graphic Only (OpenAI, no text)
+                    </option>
+                    <option value="text_gpt_image">
+                      Graphic + Text (GPT Image 1)
+                    </option>
+                    <option value="graphic_gpt_image">
+                      Graphic Only (GPT Image 1, no text)
+                    </option>
                   </select>
+                  {variantForm.visualMode.includes("openai") && (
+                    <label className="row">
+                      <input
+                        type="checkbox"
+                        checked={variantForm.openaiHd || false}
+                        onChange={(e) =>
+                          setVariantForm((old) => ({
+                            ...old,
+                            openaiHd: e.target.checked,
+                          }))
+                        }
+                      />
+                      HD quality (~$0.08/image instead of ~$0.04)
+                    </label>
+                  )}
+                  {variantForm.visualMode.includes("gpt_image") && (
+                    <select
+                      value={variantForm.gptQuality || "medium"}
+                      onChange={(e) =>
+                        setVariantForm((old) => ({
+                          ...old,
+                          gptQuality: e.target.value,
+                        }))
+                      }
+                    >
+                      <option value="low">Low quality (~$0.02/image)</option>
+                      <option value="medium">Medium quality (~$0.06/image)</option>
+                      <option value="high">High quality (~$0.26/image)</option>
+                    </select>
+                  )}
+                  <input
+                    type="text"
+                    placeholder="Style hint (e.g. 'make it flashy', 'retro vibe')"
+                    value={variantForm.promptHint || ""}
+                    onChange={(e) =>
+                      setVariantForm((old) => ({
+                        ...old,
+                        promptHint: e.target.value,
+                      }))
+                    }
+                  />
                 </div>
                 <div className="row" style={{ marginTop: 12 }}>
                   <button className="primary" type="submit">
@@ -770,11 +948,67 @@ export function App() {
                 <option value="graphic_only">
                   Graphic Only (HuggingFace, no text)
                 </option>
+                <option value="text_only_openai">
+                  Graphic + Text (OpenAI DALL-E 3)
+                </option>
+                <option value="graphic_openai">
+                  Graphic Only (OpenAI, no text)
+                </option>
+                <option value="text_gpt_image">
+                  Graphic + Text (GPT Image 1)
+                </option>
+                <option value="graphic_gpt_image">
+                  Graphic Only (GPT Image 1, no text)
+                </option>
               </select>
 
               <div className="hint-box">
                 {VISUAL_MODE_HINTS[generationForm.visualMode]}
               </div>
+
+              {generationForm.visualMode.includes("openai") && (
+                <label className="row">
+                  <input
+                    type="checkbox"
+                    checked={generationForm.openaiHd}
+                    onChange={(e) =>
+                      setGenerationForm((old) => ({
+                        ...old,
+                        openaiHd: e.target.checked,
+                      }))
+                    }
+                  />
+                  HD quality (~$0.08/image instead of ~$0.04)
+                </label>
+              )}
+
+              {generationForm.visualMode.includes("gpt_image") && (
+                <select
+                  value={generationForm.gptQuality}
+                  onChange={(e) =>
+                    setGenerationForm((old) => ({
+                      ...old,
+                      gptQuality: e.target.value,
+                    }))
+                  }
+                >
+                  <option value="low">Low quality (~$0.02/image)</option>
+                  <option value="medium">Medium quality (~$0.06/image)</option>
+                  <option value="high">High quality (~$0.26/image)</option>
+                </select>
+              )}
+
+              <input
+                type="text"
+                placeholder="Style hint (e.g. 'make it flashy', 'retro vibe')"
+                value={generationForm.promptHint}
+                onChange={(e) =>
+                  setGenerationForm((old) => ({
+                    ...old,
+                    promptHint: e.target.value,
+                  }))
+                }
+              />
 
               <select
                 value={generationForm.palette}
@@ -803,7 +1037,12 @@ export function App() {
                     const v = e.target.value;
                     setGenerationForm((old) => ({
                       ...old,
-                      count: v === "custom" ? old.count === "0" ? "" : old.count : v,
+                      count:
+                        v === "custom"
+                          ? old.count === "0"
+                            ? ""
+                            : old.count
+                          : v,
                     }));
                   }}
                 >
@@ -813,7 +1052,9 @@ export function App() {
                     </option>
                   ))}
                 </select>
-                {!COUNT_OPTIONS.some((c) => c.value === generationForm.count) && (
+                {!COUNT_OPTIONS.some(
+                  (c) => c.value === generationForm.count,
+                ) && (
                   <input
                     type="number"
                     min="1"
@@ -1029,7 +1270,7 @@ export function App() {
                 .toFixed(2)}
             </div>
             <div className="table-wrap">
-              <table>
+              <table className="expenses-table">
                 <thead>
                   <tr>
                     <th>ID</th>
@@ -1072,7 +1313,7 @@ export function App() {
         {tab === "Jobs" && (
           <>
             <div className="table-wrap">
-              <table>
+              <table className="jobs-table">
                 <thead>
                   <tr>
                     <th>Job ID</th>
@@ -1132,19 +1373,35 @@ export function App() {
           </>
         )}
 
+        {tab === "Etsy" && <EtsySetup />}
+        {tab === "Pinterest" && <PinterestTab />}
+
         {genModal && (
           <div className="image-modal-overlay" onClick={closeGenModal}>
-            <div className="gen-modal-content" onClick={(e) => e.stopPropagation()}>
+            <div
+              className="gen-modal-content"
+              onClick={(e) => e.stopPropagation()}
+            >
               <div className="gen-modal-header">
                 <h3 style={{ margin: 0 }}>
-                  {genModal.phase === "generating" ? "Generating..." : genModal.phase === "complete" ? "Generation Complete" : "Generation Failed"}
+                  {genModal.phase === "generating"
+                    ? "Generating..."
+                    : genModal.phase === "complete"
+                      ? "Generation Complete"
+                      : "Generation Failed"}
                 </h3>
                 <div className="row" style={{ gap: 8 }}>
-                  <span className={`badge ${genModal.status === "success" ? "approved" : genModal.status === "failed" ? "rejected" : "generated"}`}>
+                  <span
+                    className={`badge ${genModal.status === "success" ? "approved" : genModal.status === "failed" ? "rejected" : "generated"}`}
+                  >
                     {genModal.status}
                   </span>
-                  {genModal.phase === "generating" && <span className="spinner" />}
-                  <button type="button" onClick={closeGenModal}>Close</button>
+                  {genModal.phase === "generating" && (
+                    <span className="spinner" />
+                  )}
+                  <button type="button" onClick={closeGenModal}>
+                    Close
+                  </button>
                 </div>
               </div>
 
@@ -1158,80 +1415,134 @@ export function App() {
                 <button
                   type="button"
                   style={{ marginBottom: 12, fontSize: 13 }}
-                  onClick={() => setGenModal((prev) => prev ? { ...prev, showLog: true } : prev)}
+                  onClick={() =>
+                    setGenModal((prev) =>
+                      prev ? { ...prev, showLog: true } : prev,
+                    )
+                  }
                 >
                   Show Log
                 </button>
               )}
 
-              {genModal.phase === "complete" && genModal.showLog && genModal.generatedFiles.length > 0 && (
-                <button
-                  type="button"
-                  style={{ marginBottom: 12, fontSize: 13 }}
-                  onClick={() => setGenModal((prev) => prev ? { ...prev, showLog: false } : prev)}
-                >
-                  Hide Log
-                </button>
-              )}
+              {genModal.phase === "complete" &&
+                genModal.showLog &&
+                genModal.generatedFiles.length > 0 && (
+                  <button
+                    type="button"
+                    style={{ marginBottom: 12, fontSize: 13 }}
+                    onClick={() =>
+                      setGenModal((prev) =>
+                        prev ? { ...prev, showLog: false } : prev,
+                      )
+                    }
+                  >
+                    Hide Log
+                  </button>
+                )}
 
-              {genModal.phase === "complete" && genModal.generatedFiles.length === 1 && (
-                <div className="gen-modal-single">
-                  <img
-                    src={api.designImageUrl(genModal.designType, genModal.generatedFiles[0])}
-                    alt={genModal.generatedFiles[0]}
-                    className="gen-modal-single-img"
-                    onError={(e) => { e.currentTarget.style.display = "none"; }}
-                  />
-                  <div className="gen-modal-actions">
-                    <button
-                      className={`primary ${genModal.approvedFiles[genModal.generatedFiles[0]] === true ? "gen-modal-selected" : ""}`}
-                      onClick={() => handleModalApproval(genModal.designType, genModal.generatedFiles[0], true)}
-                    >
-                      Approve
-                    </button>
-                    <button
-                      className={`danger ${genModal.approvedFiles[genModal.generatedFiles[0]] === false ? "gen-modal-selected" : ""}`}
-                      onClick={() => handleModalApproval(genModal.designType, genModal.generatedFiles[0], false)}
-                    >
-                      Reject
-                    </button>
+              {genModal.phase === "complete" &&
+                genModal.generatedFiles.length === 1 && (
+                  <div className="gen-modal-single">
+                    <img
+                      src={api.designImageUrl(
+                        genModal.designType,
+                        genModal.generatedFiles[0],
+                      )}
+                      alt={genModal.generatedFiles[0]}
+                      className="gen-modal-single-img"
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                      }}
+                    />
+                    <div className="gen-modal-actions">
+                      <button
+                        className={`primary ${genModal.approvedFiles[genModal.generatedFiles[0]] === true ? "gen-modal-selected" : ""}`}
+                        onClick={() =>
+                          handleModalApproval(
+                            genModal.designType,
+                            genModal.generatedFiles[0],
+                            true,
+                          )
+                        }
+                      >
+                        Approve
+                      </button>
+                      <button
+                        className={`danger ${genModal.approvedFiles[genModal.generatedFiles[0]] === false ? "gen-modal-selected" : ""}`}
+                        onClick={() =>
+                          handleModalApproval(
+                            genModal.designType,
+                            genModal.generatedFiles[0],
+                            false,
+                          )
+                        }
+                      >
+                        Reject
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {genModal.phase === "complete" && genModal.generatedFiles.length > 1 && (
-                <div className="gen-modal-grid">
-                  {genModal.generatedFiles.map((filename) => {
-                    const state = genModal.approvedFiles[filename];
-                    const borderClass = state === true ? "gen-card-approved" : state === false ? "gen-card-rejected" : "";
-                    return (
-                      <div key={filename} className={`gen-modal-card ${borderClass}`}>
-                        <img
-                          src={api.designImageUrl(genModal.designType, filename)}
-                          alt={filename}
-                          className="gen-modal-card-img"
-                          onError={(e) => { e.currentTarget.style.display = "none"; }}
-                        />
-                        <div className="gen-modal-card-name">{filename}</div>
-                        <div className="gen-modal-actions">
-                          <button
-                            className={`primary ${state === true ? "gen-modal-selected" : ""}`}
-                            onClick={() => handleModalApproval(genModal.designType, filename, true)}
-                          >
-                            Approve
-                          </button>
-                          <button
-                            className={`danger ${state === false ? "gen-modal-selected" : ""}`}
-                            onClick={() => handleModalApproval(genModal.designType, filename, false)}
-                          >
-                            Reject
-                          </button>
+              {genModal.phase === "complete" &&
+                genModal.generatedFiles.length > 1 && (
+                  <div className="gen-modal-grid">
+                    {genModal.generatedFiles.map((filename) => {
+                      const state = genModal.approvedFiles[filename];
+                      const borderClass =
+                        state === true
+                          ? "gen-card-approved"
+                          : state === false
+                            ? "gen-card-rejected"
+                            : "";
+                      return (
+                        <div
+                          key={filename}
+                          className={`gen-modal-card ${borderClass}`}
+                        >
+                          <img
+                            src={api.designImageUrl(
+                              genModal.designType,
+                              filename,
+                            )}
+                            alt={filename}
+                            className="gen-modal-card-img"
+                            onError={(e) => {
+                              e.currentTarget.style.display = "none";
+                            }}
+                          />
+                          <div className="gen-modal-card-name">{filename}</div>
+                          <div className="gen-modal-actions">
+                            <button
+                              className={`primary ${state === true ? "gen-modal-selected" : ""}`}
+                              onClick={() =>
+                                handleModalApproval(
+                                  genModal.designType,
+                                  filename,
+                                  true,
+                                )
+                              }
+                            >
+                              Approve
+                            </button>
+                            <button
+                              className={`danger ${state === false ? "gen-modal-selected" : ""}`}
+                              onClick={() =>
+                                handleModalApproval(
+                                  genModal.designType,
+                                  filename,
+                                  false,
+                                )
+                              }
+                            >
+                              Reject
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+                      );
+                    })}
+                  </div>
+                )}
             </div>
           </div>
         )}

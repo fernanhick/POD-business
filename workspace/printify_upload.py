@@ -47,38 +47,36 @@ SP = os.path.join(WORKSPACE, "spreadsheets")
 # Printify catalog API (see docs at bottom of this file).
 # ── Shared product configs (same garment for both fronts) ────────
 _TSHIRT_PRODUCT = {
-    "blueprint_id": 5,        # Unisex Cotton Crew Tee (Next Level 3600)
-    "provider_id":  99,       # Printify Choice
+    "blueprint_id": 12,       # Unisex Jersey Short Sleeve Tee (Bella+Canvas 3001)
+    "provider_id":  39,       # SwiftPOD
     "variants": [
-        # Solid Black: S–5XL
-        {"id": 17427, "size": "S"},
-        {"id": 17428, "size": "M"},
-        {"id": 17429, "size": "L"},
-        {"id": 17430, "size": "XL"},
-        {"id": 17431, "size": "2XL"},
-        {"id": 17432, "size": "3XL"},
-        {"id": 17433, "size": "4XL"},
-        {"id": 101781, "size": "5XL"},
-        # Solid White: S–5XL
-        {"id": 17643, "size": "S"},
-        {"id": 17644, "size": "M"},
-        {"id": 17645, "size": "L"},
-        {"id": 17646, "size": "XL"},
-        {"id": 17647, "size": "2XL"},
-        {"id": 17648, "size": "3XL"},
-        {"id": 17649, "size": "4XL"},
-        {"id": 101810, "size": "5XL"},
+        # Black: S–4XL
+        {"id": 18100, "size": "S"},
+        {"id": 18101, "size": "M"},
+        {"id": 18102, "size": "L"},
+        {"id": 18103, "size": "XL"},
+        {"id": 18104, "size": "2XL"},
+        {"id": 18105, "size": "3XL"},
+        {"id": 18106, "size": "4XL"},
+        # White: S–4XL
+        {"id": 18540, "size": "S"},
+        {"id": 18541, "size": "M"},
+        {"id": 18542, "size": "L"},
+        {"id": 18543, "size": "XL"},
+        {"id": 18544, "size": "2XL"},
+        {"id": 18545, "size": "3XL"},
+        {"id": 18546, "size": "4XL"},
     ],
-    "base_cost_cents": 1163,
+    "base_cost_cents": 1129,
     "oversize_costs": {
-        "2XL": 1409, "3XL": 1613, "4XL": 1796, "5XL": 1930,
+        "2XL": 1382, "3XL": 1612, "4XL": 1863,
     },
-    "shipping_cents": 399,
+    "shipping_cents": 429,
 }
 
 _HOODIE_PRODUCT = {
     "blueprint_id": 77,       # Unisex Heavy Blend Hooded Sweatshirt (Gildan 18500)
-    "provider_id":  99,       # Printify Choice
+    "provider_id":  39,       # SwiftPOD
     "variants": [
         # Black: S–5XL
         {"id": 32918, "size": "S"},
@@ -99,11 +97,11 @@ _HOODIE_PRODUCT = {
         {"id": 32916, "size": "4XL"},
         {"id": 32917, "size": "5XL"},
     ],
-    "base_cost_cents": 2158,
+    "base_cost_cents": 2224,
     "oversize_costs": {
-        "2XL": 2378, "3XL": 2503, "4XL": 2549, "5XL": 2548,
+        "2XL": 2437, "3XL": 2558, "4XL": 2618, "5XL": 2618,
     },
-    "shipping_cents": 739,
+    "shipping_cents": 769,
 }
 
 FRONT_CONFIG = {
@@ -116,51 +114,63 @@ FRONT_CONFIG = {
                 **_TSHIRT_PRODUCT,
                 "tags": [
                     "sneakerhead shirt", "sneaker collector tee",
-                    "streetwear graphic tee", "sneaker culture",
-                    "hypebeast clothing", "rotation tee",
-                    "sneaker lover gift", "kicks shirt", "sneakerhead gift",
-                    "urban streetwear", "sneaker graphic", "sneaker tee",
-                    "streetwear tee",
+                    "streetwear graphic tee", "sneaker culture tshirt",
+                    "rotationclub tee", "sneaker lover gift for him",
+                    "kicks and culture shirt", "sneakerhead birthday gift",
+                    "sneaker dad gift", "hypebeast graphic tee",
+                    "sneaker collector gift", "streetwear tee for men",
+                    "sneakerhead christmas gift",
                 ],
                 "title_template": (
-                    "{name} | Sneakerhead Tee | Sneaker Collector Shirt "
-                    "| Streetwear Graphic Tee | Gift for Sneaker Lover"
+                    "{name} Sneakerhead Shirt | Sneaker Culture Graphic Tee "
+                    "| RotationClub | Gift for Sneaker Collector "
+                    "| Streetwear Tee"
                 ),
                 "description_template": (
-                    "This sneakerhead graphic celebrates sneaker culture "
-                    "and collector life. Designed for the daily rotation "
+                    "RotationClub -- sneaker culture apparel for "
+                    "collectors, sneakerheads, and streetwear fans.\n\n"
+                    "This graphic tee celebrates sneaker culture and "
+                    "collector life. Designed for the daily rotation "
                     "and the deadstock shelf alike.\n\n"
-                    "* Soft, lightweight cotton\n"
-                    "* DTG printed, wash-resistant\n"
-                    "* Available in multiple sizes and colors\n\n"
+                    "DETAILS:\n"
+                    "* Soft, lightweight ring-spun cotton (Bella+Canvas 3001)\n"
+                    "* DTG printed -- vibrant, wash-resistant graphics\n"
+                    "* Unisex fit -- true to size\n"
+                    "* Available in Black and White, S through 5XL\n\n"
                     "Perfect gift for sneakerheads, sneaker collectors, "
-                    "and streetwear fans."
+                    "and streetwear fans. Welcome to the club."
                 ),
             },
             "hoodie": {
                 **_HOODIE_PRODUCT,
                 "tags": [
                     "sneakerhead hoodie", "sneaker collector hoodie",
-                    "streetwear hoodie", "sneaker culture",
-                    "hypebeast clothing", "sneaker lover gift",
-                    "kicks hoodie", "sneakerhead gift", "urban streetwear",
-                    "sneaker graphic", "streetwear pullover",
-                    "hoodie gift", "sneaker apparel",
+                    "streetwear graphic hoodie", "sneaker culture hoodie",
+                    "rotationclub hoodie", "sneaker lover gift for him",
+                    "kicks and culture hoodie", "sneakerhead birthday gift",
+                    "sneaker dad gift", "hypebeast hoodie",
+                    "sneaker collector gift", "streetwear hoodie for men",
+                    "sneakerhead christmas gift",
                 ],
                 "title_template": (
-                    "{name} | Sneakerhead Hoodie | Sneaker Collector Hoodie "
-                    "| Streetwear Graphic Hoodie | Gift for Sneaker Lover"
+                    "{name} Sneakerhead Hoodie | Sneaker Culture Graphic Hoodie "
+                    "| RotationClub | Gift for Sneaker Collector "
+                    "| Streetwear Hoodie"
                 ),
                 "description_template": (
-                    "This sneakerhead graphic celebrates sneaker culture "
-                    "and collector life. Designed for the daily rotation "
+                    "RotationClub -- sneaker culture apparel for "
+                    "collectors, sneakerheads, and streetwear fans.\n\n"
+                    "This graphic hoodie celebrates sneaker culture and "
+                    "collector life. Designed for the daily rotation "
                     "and the deadstock shelf alike.\n\n"
-                    "* Oversized streetwear fit -- size up for drop-shoulder "
-                    "silhouette\n"
-                    "* Premium heavyweight fleece blend\n"
-                    "* DTG printed, wash-resistant\n\n"
+                    "DETAILS:\n"
+                    "* Premium heavyweight fleece blend (Gildan 18500)\n"
+                    "* DTG printed -- vibrant, wash-resistant graphics\n"
+                    "* Oversized streetwear fit -- size up for "
+                    "drop-shoulder silhouette\n"
+                    "* Available in Black and White, S through 5XL\n\n"
                     "Perfect gift for sneakerheads, sneaker collectors, "
-                    "and streetwear fans."
+                    "and streetwear fans. Welcome to the club."
                 ),
             },
         },
@@ -173,37 +183,58 @@ FRONT_CONFIG = {
             "tshirt": {
                 **_TSHIRT_PRODUCT,
                 "tags": [
-                    "graphic tee", "unique gift shirt", "funny tee",
-                    "quote shirt", "trendy tee", "minimalist graphic",
-                    "gift for him", "gift for her", "unisex tee",
-                    "casual shirt", "everyday tee", "cool graphic tee",
-                    "statement tee",
+                    "graphic tee for men", "unique gift shirt for him",
+                    "funny quote tee", "trendy graphic tshirt",
+                    "minimalist graphic tee", "gift for boyfriend",
+                    "cool statement shirt", "unisex graphic tee",
+                    "birthday gift for him", "casual everyday tee",
+                    "aesthetic graphic shirt", "gift for best friend",
+                    "sarcastic quote tee",
                 ],
-                "title_template": "{name} | Graphic Tee | Unique Gift",
+                "title_template": (
+                    "{name} Graphic Tee | Unique Gift for Him "
+                    "| Funny Quote Shirt | Trendy Unisex Tee"
+                ),
                 "description_template": (
                     "A unique graphic tee perfect as a gift or for "
                     "everyday wear.\n\n"
-                    "* Soft, lightweight cotton\n"
-                    "* DTG printed, wash-resistant\n"
-                    "* Available in multiple sizes and colors"
+                    "DETAILS:\n"
+                    "* Soft, lightweight ring-spun cotton (Bella+Canvas 3001)\n"
+                    "* DTG printed -- vibrant, wash-resistant graphics\n"
+                    "* Unisex fit -- true to size\n"
+                    "* Available in Black and White, S through 5XL\n\n"
+                    "Makes a great birthday gift, holiday gift, "
+                    "or just-because gift for anyone who loves "
+                    "bold graphic tees."
                 ),
             },
             "hoodie": {
                 **_HOODIE_PRODUCT,
                 "tags": [
-                    "graphic hoodie", "unique gift hoodie", "funny hoodie",
-                    "quote hoodie", "trendy hoodie", "minimalist graphic",
-                    "gift for him", "gift for her", "unisex hoodie",
-                    "casual hoodie", "everyday hoodie", "cool graphic hoodie",
-                    "statement hoodie",
+                    "graphic hoodie for men", "unique gift hoodie for him",
+                    "funny quote hoodie", "trendy graphic hoodie",
+                    "minimalist graphic hoodie", "gift for boyfriend",
+                    "cool statement hoodie", "unisex graphic hoodie",
+                    "birthday gift for him", "casual everyday hoodie",
+                    "aesthetic graphic hoodie", "gift for best friend",
+                    "sarcastic quote hoodie",
                 ],
-                "title_template": "{name} | Graphic Hoodie | Unique Gift",
+                "title_template": (
+                    "{name} Graphic Hoodie | Unique Gift for Him "
+                    "| Funny Quote Hoodie | Trendy Unisex Hoodie"
+                ),
                 "description_template": (
                     "A unique graphic hoodie perfect as a gift or for "
                     "everyday wear.\n\n"
-                    "* Heavyweight fleece blend\n"
-                    "* DTG printed, wash-resistant\n"
-                    "* Available in multiple sizes and colors"
+                    "DETAILS:\n"
+                    "* Premium heavyweight fleece blend (Gildan 18500)\n"
+                    "* DTG printed -- vibrant, wash-resistant graphics\n"
+                    "* Oversized fit -- size up for drop-shoulder "
+                    "silhouette\n"
+                    "* Available in Black and White, S through 5XL\n\n"
+                    "Makes a great birthday gift, holiday gift, "
+                    "or just-because gift for anyone who loves "
+                    "bold graphic hoodies."
                 ),
             },
         },
@@ -494,6 +525,108 @@ def sync_etsy_ids(front):
     print(f"  Synced {synced} Etsy listing IDs")
 
 
+def update_product(product_id, title, description, tags):
+    """Update an existing Printify product's title, description, and tags."""
+    payload = {
+        "title": title,
+        "description": description,
+        "tags": tags,
+    }
+    resp = requests.put(
+        f"{BASE}/shops/{SHOP_ID}/products/{product_id}.json",
+        headers={**HEADERS, "Content-Type": "application/json"},
+        json=payload,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def run_update(front, product_type="tshirt", republish=False, dry_run=False):
+    """Update all existing products for a front with current tags/title/description."""
+    cfg = FRONT_CONFIG[front]
+    pcfg = cfg["products"][product_type]
+    spreadsheet = cfg["spreadsheet"]
+    sheet_name = cfg["sheet_name"]
+
+    wb = load_workbook(spreadsheet)
+    ws = wb[sheet_name]
+
+    header_row = 2
+    headers = {ws.cell(row=header_row, column=c).value: c
+               for c in range(1, ws.max_column + 1)}
+
+    filename_col = headers.get("Filename", 2)
+    prod_col = headers.get("Printify Product ID")
+
+    if not prod_col:
+        print("  Could not find 'Printify Product ID' column in spreadsheet")
+        wb.close()
+        return
+
+    # Collect rows with product IDs
+    rows = []
+    for row in range(3, ws.max_row + 1):
+        product_id = ws.cell(row=row, column=prod_col).value
+        filename = ws.cell(row=row, column=filename_col).value
+        if product_id and filename:
+            rows.append((row, str(product_id).strip(), filename.strip()))
+    wb.close()
+
+    if not rows:
+        print(f"  No products found in spreadsheet for Front {front}")
+        return
+
+    # Build tags (same logic as create_product)
+    base_tags = list(pcfg.get("tags", []))
+
+    action = "update + republish" if republish else "update on Printify"
+    print(f"  Front {front} ({product_type}): {len(rows)} products to {action}\n")
+
+    updated = 0
+    for row_num, product_id, filename in rows:
+        base_name = os.path.splitext(filename)[0].replace("_", " ").title()
+        title = pcfg["title_template"].format(name=base_name)
+        desc = pcfg["description_template"]
+
+        # Per-product tags: base + dynamic from design name
+        tags = list(base_tags)
+        name_lower = base_name.lower().strip()
+        dynamic = [name_lower]
+        first_word = name_lower.split()[0] if name_lower.split() else None
+        if first_word:
+            dynamic.append(f"{first_word} tee" if product_type == "tshirt"
+                           else f"{first_word} hoodie")
+        for tag in dynamic:
+            if tag not in tags:
+                tags.append(tag)
+        tags = tags[:13]
+
+        if dry_run:
+            print(f"  [DRY] {filename} (id={product_id})")
+            print(f"        Title: {title[:70]}...")
+            print(f"        Tags:  {', '.join(tags[:5])}... ({len(tags)} total)\n")
+            continue
+
+        try:
+            update_product(product_id, title, desc, tags)
+            print(f"  [UPD] {filename} (id={product_id}) -- tags: {len(tags)}, title+desc updated")
+
+            if republish:
+                publish_product(product_id)
+                print(f"        Re-published to Etsy")
+
+            updated += 1
+        except requests.HTTPError as e:
+            print(f"  [ERR] {filename}: HTTP {e.response.status_code} "
+                  f"-- {e.response.text[:200]}")
+        except Exception as e:
+            print(f"  [ERR] {filename}: {e}")
+
+        time.sleep(1.0)
+
+    print(f"\n  Done: {updated}/{len(rows)} products updated")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Bulk upload designs to Printify and publish to Etsy"
@@ -510,6 +643,18 @@ def main():
                     help="Create on Printify but don't publish to Etsy (for drops)")
     up.add_argument("--dry-run", action="store_true",
                     help="Preview what would be uploaded without doing it")
+
+    # ── update command ──
+    upd = sub.add_parser("update",
+                         help="Update existing products with current tags/title/description")
+    upd.add_argument("--front", required=True, choices=["A", "B"],
+                     help="A = Sneaker Culture, B = Generalized")
+    upd.add_argument("--product", default="tshirt", choices=["tshirt", "hoodie"],
+                     help="Product type: tshirt or hoodie (default: tshirt)")
+    upd.add_argument("--republish", action="store_true",
+                     help="Re-publish to Etsy after updating (pushes changes live)")
+    upd.add_argument("--dry-run", action="store_true",
+                     help="Preview what would be updated without doing it")
 
     # ── sync-ids command ──
     sync = sub.add_parser("sync-ids",
@@ -533,6 +678,12 @@ def main():
         if not args.dry_run:
             check_config()
         run_upload(args.front, product_type=args.product, draft=args.draft, dry_run=args.dry_run)
+
+    elif args.command == "update":
+        if not args.dry_run:
+            check_config()
+        run_update(args.front, product_type=args.product,
+                   republish=args.republish, dry_run=args.dry_run)
 
     elif args.command == "sync-ids":
         check_config()

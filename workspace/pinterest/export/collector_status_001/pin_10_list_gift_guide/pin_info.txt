@@ -1,0 +1,26 @@
+═══════════════════════════════════════════
+ PIN 10 — list_gift_guide
+═══════════════════════════════════════════
+
+BOARD:
+Gifts for Sneakerheads
+
+TITLE:
+Collector Status 001 | affordable gift ideas
+
+DESCRIPTION:
+Collector Status 001 | Find the perfect gift | #affordablegiftideas #stockingstufferideas #babyshowergiftideas #giftsfordad #uniquegiftsunder50
+
+DESTINATION LINK:
+https://www.etsy.com/shop/RotationClub
+
+ALT TEXT:
+Collector Status 001 - Sneaker culture graphic tee by RotationClub
+
+───────────────────────────────────────────
+KEYWORDS (for reference):
+affordable gift ideas,stocking stuffer ideas,baby shower gift ideas,gifts for dad,unique gifts under 50
+
+PIN TYPE: list
+DESIGN: collector_status_001.png
+═══════════════════════════════════════════

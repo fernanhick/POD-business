@@ -24,6 +24,29 @@ Useful commands:
 
 The script writes logs and PID files under `webapp/.runtime/`.
 
+## Access from another device (same Wi-Fi/LAN)
+
+1. Start servers from this machine:
+
+```powershell
+cd "d:\Projects\POD business\webapp"
+.\servers.ps1 start
+```
+
+2. Find your machine LAN IP (the script also prints it in `status`):
+
+```powershell
+.\servers.ps1 status
+```
+
+3. Open on another device:
+
+```text
+http://<YOUR_LAN_IP>:5173
+```
+
+The frontend proxies `/api` requests to the local backend (`127.0.0.1:8000`), so other devices only need access to port `5173`.
+
 ## Backend setup (first run)
 
 ```powershell

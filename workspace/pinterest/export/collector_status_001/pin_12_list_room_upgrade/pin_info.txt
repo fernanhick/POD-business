@@ -1,0 +1,26 @@
+═══════════════════════════════════════════
+ PIN 12 — list_room_upgrade
+═══════════════════════════════════════════
+
+BOARD:
+Sneaker Cave Decor
+
+TITLE:
+Collector Status 001 | modern bedroom ideas
+
+DESCRIPTION:
+Collector Status 001 | Upgrade your space | #modernbedroomideas #teenroommakeover #bohoroomdecor #kitchenwalldecor #livingroomposterdecor
+
+DESTINATION LINK:
+https://www.etsy.com/shop/RotationClub
+
+ALT TEXT:
+Collector Status 001 - Sneaker culture graphic tee by RotationClub
+
+───────────────────────────────────────────
+KEYWORDS (for reference):
+modern bedroom ideas,teen room makeover,boho room decor,kitchen wall decor,living room poster decor
+
+PIN TYPE: list
+DESIGN: collector_status_001.png
+═══════════════════════════════════════════

@@ -1,0 +1,26 @@
+═══════════════════════════════════════════
+ PIN 19 — product_poster
+═══════════════════════════════════════════
+
+BOARD:
+Sneaker Cave Decor
+
+TITLE:
+Rotation Society 001 | apartment decorating ideas
+
+DESCRIPTION:
+Rotation Society 001 | Decorate your space | #apartmentdecoratingideas #officewallinspiration #dormroomwalldecor #modernbedroomideas #midcenturymodernroom
+
+DESTINATION LINK:
+https://www.etsy.com/listing/4467831589
+
+ALT TEXT:
+Rotation Society 001 - Sneaker culture graphic tee by RotationClub
+
+───────────────────────────────────────────
+KEYWORDS (for reference):
+apartment decorating ideas,office wall inspiration,dorm room wall decor,modern bedroom ideas,mid century modern room
+
+PIN TYPE: product
+DESIGN: rotation_society_001.png
+═══════════════════════════════════════════

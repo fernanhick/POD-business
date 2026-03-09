@@ -1,0 +1,84 @@
+[2m01:18:16[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/dashboard/summary[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m01:18:16[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/designs[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m01:18:16[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/jobs[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m01:18:16[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/expenses[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m01:19:15[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/dashboard/summary[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m01:19:15[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/designs[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m01:19:15[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/jobs[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m01:19:16[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/expenses[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m01:20:15[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/dashboard/summary[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m01:20:16[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/designs[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m01:20:16[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/jobs[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m01:20:16[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/expenses[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m01:21:16[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/dashboard/summary[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m01:21:16[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/designs[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m01:21:16[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/jobs[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m01:21:16[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/expenses[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m01:22:16[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/dashboard/summary[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m01:22:16[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/designs[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m01:22:16[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/jobs[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m01:22:16[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/expenses[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m01:23:16[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/dashboard/summary[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m01:23:16[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/designs[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m01:23:16[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/jobs[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m01:23:16[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/expenses[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m10:12:15[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/dashboard/summary[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m10:12:15[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/designs[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m10:12:15[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/jobs[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)
+[2m10:12:15[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/expenses[39m
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16)

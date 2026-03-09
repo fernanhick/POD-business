@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import uuid
 from contextlib import contextmanager
 from datetime import datetime
@@ -32,12 +33,25 @@ try:
         upload_image as printify_upload_image,
         create_product as printify_create_product,
         publish_product as printify_publish_product,
+        get_product as printify_get_product,
         update_spreadsheet_ids as printify_update_spreadsheet_ids,
         FRONT_CONFIG as PRINTIFY_CONFIG,
     )
     _PRINTIFY_AVAILABLE = True
 except ImportError:
     _PRINTIFY_AVAILABLE = False
+
+try:
+    from .pinterest import router as pinterest_router
+    _PINTEREST_AVAILABLE = True
+except ImportError:
+    _PINTEREST_AVAILABLE = False
+
+try:
+    from .etsy import router as etsy_router
+    _ETSY_AVAILABLE = True
+except ImportError:
+    _ETSY_AVAILABLE = False
 
 SPREADSHEETS_DIR = WORKSPACE_DIR / "spreadsheets"
 LOGS_DIR = WORKSPACE_DIR / "logs"
@@ -70,15 +84,26 @@ app = FastAPI(title="POD Business Local API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origin_regex=r"^https?://([a-zA-Z0-9-]+\.)*[a-zA-Z0-9-]+:5173$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+if _PINTEREST_AVAILABLE:
+    app.include_router(pinterest_router, prefix="/api/pinterest", tags=["pinterest"])
+
+if _ETSY_AVAILABLE:
+    app.include_router(etsy_router, prefix="/api/etsy", tags=["etsy"])
+
 
 class GenerationRequest(BaseModel):
     designType: Literal["general", "sneaker"]
-    visualMode: Literal["random", "text_only", "graphic_text", "graphic_only"] = "random"
+    visualMode: Literal[
+        "random", "text_only", "graphic_text", "graphic_only",
+        "text_only_openai", "graphic_openai",
+        "text_gpt_image", "graphic_gpt_image",
+    ] = "random"
     palette: int = 0
     count: int = 0
     dropId: str | None = None
@@ -86,17 +111,27 @@ class GenerationRequest(BaseModel):
     niche: str | None = None
     subNiche: str | None = None
     skipApi: bool = False
+    openaiHd: bool = False
+    gptQuality: str = "medium"
+    promptHint: str = ""
 
 
 class VariantRequest(BaseModel):
     designType: Literal["general", "sneaker"]
     designName: str
     palette: int = 0
-    visualMode: Literal["text_only", "graphic_text", "graphic_only"] = "text_only"
+    visualMode: Literal[
+        "text_only", "graphic_text", "graphic_only",
+        "text_only_openai", "graphic_openai",
+        "text_gpt_image", "graphic_gpt_image",
+    ] = "text_only"
     phrase: str | None = None
     niche: str | None = None
     subNiche: str | None = None
     skipApi: bool = False
+    openaiHd: bool = False
+    gptQuality: str = "medium"
+    promptHint: str = ""
 
 
 class ApprovalRequest(BaseModel):
@@ -285,6 +320,52 @@ def _header_map(ws) -> dict[str, int]:
     }
 
 
+def _date_value_to_sort_ts(value: Any) -> float:
+    if value is None:
+        return 0.0
+
+    if isinstance(value, datetime):
+        return value.timestamp()
+
+    if hasattr(value, "year") and hasattr(value, "month") and hasattr(value, "day"):
+        try:
+            return datetime(value.year, value.month, value.day).timestamp()
+        except Exception:
+            pass
+
+    text = str(value).strip()
+    if not text:
+        return 0.0
+
+    for parser in (
+        lambda s: datetime.fromisoformat(s),
+        lambda s: datetime.strptime(s, "%Y-%m-%d"),
+        lambda s: datetime.strptime(s, "%m/%d/%Y"),
+        lambda s: datetime.strptime(s, "%Y/%m/%d"),
+    ):
+        try:
+            return parser(text).timestamp()
+        except Exception:
+            continue
+
+    return 0.0
+
+
+def _printify_product_url(product_id: str | None) -> str | None:
+    if not product_id:
+        return None
+    shop_id = os.environ.get("PRINTIFY_SHOP_ID")
+    if not shop_id:
+        return None
+    return f"https://printify.com/app/products/{shop_id}/{product_id}"
+
+
+def _etsy_listing_url(listing_id: str | None) -> str | None:
+    if not listing_id:
+        return None
+    return f"https://www.etsy.com/listing/{listing_id}"
+
+
 def _read_design_rows(design_type: str) -> list[dict[str, Any]]:
     cfg = FRONT_CONFIG[design_type]
     wb = load_workbook(cfg["spreadsheet"])
@@ -312,6 +393,8 @@ def _read_design_rows(design_type: str) -> list[dict[str, Any]]:
             "printifyProductId": ws.cell(row=row, column=headers["Printify Product ID"]).value if "Printify Product ID" in headers else None,
             "etsyListingId": ws.cell(row=row, column=headers["Etsy Listing ID"]).value if "Etsy Listing ID" in headers else None,
         }
+        row_data["printifyUrl"] = _printify_product_url(str(row_data["printifyProductId"]) if row_data["printifyProductId"] else None)
+        row_data["etsyUrl"] = _etsy_listing_url(str(row_data["etsyListingId"]) if row_data["etsyListingId"] else None)
         rows.append(row_data)
 
     wb.close()
@@ -528,16 +611,60 @@ def _update_job(job_id: str, **fields: Any) -> None:
         con.commit()
 
 
-def _latest_log_for_front(front_code: str) -> Path | None:
+def _latest_log_for_front(front_code: str, not_before: float | None = None) -> Path | None:
     pattern = f"front_{front_code.lower()}*"
-    logs = sorted(LOGS_DIR.glob(f"{pattern}.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    candidates: list[Path] = []
+    for path in LOGS_DIR.glob(f"{pattern}.json"):
+        try:
+            mtime = path.stat().st_mtime
+        except Exception:
+            continue
+        if not_before is not None and mtime < not_before:
+            continue
+        candidates.append(path)
+
+    logs = sorted(candidates, key=lambda p: p.stat().st_mtime, reverse=True)
     return logs[0] if logs else None
+
+
+def _generated_files_from_log(log_path: Path | None) -> list[str]:
+    if not log_path or not log_path.exists():
+        return []
+
+    try:
+        payload = json.loads(log_path.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+
+    records = payload if isinstance(payload, list) else [payload]
+    names: list[str] = []
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        name = record.get("filename")
+        if isinstance(name, str) and name.strip():
+            names.append(name.strip())
+
+    deduped = list(dict.fromkeys(names))
+    return deduped
+
+
+def _new_files_since(folder: Path, before: set[str]) -> list[str]:
+    if not folder.exists():
+        return []
+
+    current = [p for p in folder.iterdir() if p.suffix.lower() == ".png"]
+    created = [p for p in current if p.name not in before]
+    created.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    return [p.name for p in created]
 
 
 def _run_generation_job(job_id: str, payload: GenerationRequest) -> None:
     _update_job(job_id, status="running", started_at=_now_iso())
     cfg = FRONT_CONFIG[payload.designType]
     front_code = cfg["code"]
+    run_started_ts = datetime.now().timestamp()
+    files_before = set(_list_pngs(cfg["design_folder"]))
 
     command = [
         sys.executable,
@@ -555,10 +682,21 @@ def _run_generation_job(job_id: str, payload: GenerationRequest) -> None:
         # graphic_only → HuggingFace (graphic), no text overlay
         visual = payload.visualMode
         if visual == "random":
-            visual = random.choice(["text_only", "graphic_text", "graphic_only"])
+            visual = random.choice([
+                "text_only", "graphic_text", "graphic_only",
+                "text_only_openai", "text_gpt_image",
+            ])
 
         if visual == "text_only":
             selected_render = "ideogram"
+        elif visual == "text_only_openai":
+            selected_render = "openai"
+        elif visual == "graphic_openai":
+            selected_render = "openai_graphic"
+        elif visual == "text_gpt_image":
+            selected_render = "gpt_image"
+        elif visual == "graphic_gpt_image":
+            selected_render = "gpt_image_graphic"
         else:
             selected_render = "hf"
 
@@ -596,8 +734,14 @@ def _run_generation_job(job_id: str, payload: GenerationRequest) -> None:
         command.extend(["--render", selected_render])
         if visual == "graphic_text":
             command.extend(["--text-renderer", "ideogram"])
-        elif visual == "graphic_only":
+        elif visual in ("graphic_only", "graphic_openai", "graphic_gpt_image"):
             command.append("--no-text-overlay")
+        if payload.openaiHd:
+            command.append("--openai-hd")
+        if payload.gptQuality and payload.gptQuality != "medium":
+            command.extend(["--gpt-quality", payload.gptQuality])
+        if payload.promptHint:
+            command.extend(["--prompt-hint", payload.promptHint])
         if payload.skipApi:
             command.append("--skip-api")
 
@@ -613,7 +757,7 @@ def _run_generation_job(job_id: str, payload: GenerationRequest) -> None:
             _update_job(job_id, status="failed", finished_at=_now_iso(), output=output)
             return
 
-        latest_log = _latest_log_for_front(front_code)
+        latest_log = _latest_log_for_front(front_code, not_before=run_started_ts)
         if latest_log:
             sync = subprocess.run(
                 [
@@ -631,15 +775,10 @@ def _run_generation_job(job_id: str, payload: GenerationRequest) -> None:
             output += "\n\n--- Workbook Sync ---\n"
             output += (sync.stdout or "") + "\n" + (sync.stderr or "")
 
-        generated_files_json = "[]"
-        if latest_log and latest_log.exists():
-            try:
-                log_data = json.loads(latest_log.read_text(encoding="utf-8"))
-                if isinstance(log_data, list):
-                    filenames = [r["filename"] for r in log_data if r.get("filename")]
-                    generated_files_json = json.dumps(filenames)
-            except Exception:
-                pass
+        generated_files = _new_files_since(cfg["design_folder"], files_before)
+        if not generated_files:
+            generated_files = _generated_files_from_log(latest_log)
+        generated_files_json = json.dumps(generated_files)
 
         _update_job(job_id, status="success", finished_at=_now_iso(), output=output, generated_files=generated_files_json)
     except Exception as exc:
@@ -654,6 +793,15 @@ def _run_generation_job(job_id: str, payload: GenerationRequest) -> None:
 @app.on_event("startup")
 def startup_event() -> None:
     _ensure_db()
+    if _PINTEREST_AVAILABLE:
+        from .pinterest.models import init_db as init_pinterest_db
+        init_pinterest_db()
+        from .pinterest.setup_service import load_credentials_to_env
+        load_credentials_to_env()
+    if _ETSY_AVAILABLE:
+        from .etsy.setup_service import init_db as init_etsy_db, load_credentials_to_env as load_etsy_creds
+        init_etsy_db()
+        load_etsy_creds()
 
 
 @app.get("/api/health")
@@ -705,12 +853,39 @@ def list_designs(
             source_path, location = _get_design_location(dt, row["filename"])
             row["location"] = location or "missing"
             row["path"] = str(source_path.resolve()) if source_path else None
+            if source_path and source_path.exists():
+                try:
+                    row["createdSortTs"] = source_path.stat().st_mtime
+                except Exception:
+                    row["createdSortTs"] = _date_value_to_sort_ts(row.get("dateCreated"))
+            else:
+                row["createdSortTs"] = _date_value_to_sort_ts(row.get("dateCreated"))
             all_rows.append(row)
 
     if status != "all":
         all_rows = [item for item in all_rows if item.get("location") == status]
 
-    all_rows.sort(key=lambda x: str(x.get("dateCreated") or ""), reverse=True)
+    # Cutoff: designs created before 2026-03-08 used white-bg pipeline (legacy)
+    LEGACY_CUTOFF_TS = 1772932106
+
+    all_rows.sort(
+        key=lambda x: (
+            float(x.get("createdSortTs") or 0),
+            int(x.get("rowNumber") or 0),
+        ),
+        reverse=True,
+    )
+    for row in all_rows:
+        ts = row.pop("createdSortTs", None)
+        if ts and ts > 0:
+            try:
+                row["createdAt"] = datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
+            except Exception:
+                row["createdAt"] = None
+            row["legacy"] = ts < LEGACY_CUTOFF_TS
+        else:
+            row["createdAt"] = None
+            row["legacy"] = True
     return {"items": all_rows, "count": len(all_rows)}
 
 
@@ -786,6 +961,8 @@ def _run_variant_job(job_id: str, payload: VariantRequest) -> None:
     _update_job(job_id, status="running", started_at=_now_iso())
     cfg = FRONT_CONFIG[payload.designType]
     front_code = cfg["code"]
+    run_started_ts = datetime.now().timestamp()
+    files_before = set(_list_pngs(cfg["design_folder"]))
 
     command = [
         sys.executable,
@@ -800,6 +977,14 @@ def _run_variant_job(job_id: str, payload: VariantRequest) -> None:
         visual = payload.visualMode
         if visual == "text_only":
             selected_render = "ideogram"
+        elif visual == "text_only_openai":
+            selected_render = "openai"
+        elif visual == "graphic_openai":
+            selected_render = "openai_graphic"
+        elif visual == "text_gpt_image":
+            selected_render = "gpt_image"
+        elif visual == "graphic_gpt_image":
+            selected_render = "gpt_image_graphic"
         else:
             selected_render = "hf"
 
@@ -814,8 +999,14 @@ def _run_variant_job(job_id: str, payload: VariantRequest) -> None:
         command.extend(["--render", selected_render])
         if visual == "graphic_text":
             command.extend(["--text-renderer", "ideogram"])
-        elif visual == "graphic_only":
+        elif visual in ("graphic_only", "graphic_openai", "graphic_gpt_image"):
             command.append("--no-text-overlay")
+        if payload.openaiHd:
+            command.append("--openai-hd")
+        if payload.gptQuality and payload.gptQuality != "medium":
+            command.extend(["--gpt-quality", payload.gptQuality])
+        if payload.promptHint:
+            command.extend(["--prompt-hint", payload.promptHint])
         if payload.skipApi:
             command.append("--skip-api")
 
@@ -829,7 +1020,7 @@ def _run_variant_job(job_id: str, payload: VariantRequest) -> None:
             _update_job(job_id, status="failed", finished_at=_now_iso(), output=output)
             return
 
-        latest_log = _latest_log_for_front(front_code)
+        latest_log = _latest_log_for_front(front_code, not_before=run_started_ts)
         if latest_log:
             sync = subprocess.run(
                 [sys.executable, str(WORKSPACE_DIR / "update_workbooks.py"),
@@ -839,15 +1030,10 @@ def _run_variant_job(job_id: str, payload: VariantRequest) -> None:
             output += "\n\n--- Workbook Sync ---\n"
             output += (sync.stdout or "") + "\n" + (sync.stderr or "")
 
-        generated_files_json = "[]"
-        if latest_log and latest_log.exists():
-            try:
-                log_data = json.loads(latest_log.read_text(encoding="utf-8"))
-                if isinstance(log_data, list):
-                    filenames = [r["filename"] for r in log_data if r.get("filename")]
-                    generated_files_json = json.dumps(filenames)
-            except Exception:
-                pass
+        generated_files = _new_files_since(cfg["design_folder"], files_before)
+        if not generated_files:
+            generated_files = _generated_files_from_log(latest_log)
+        generated_files_json = json.dumps(generated_files)
 
         _update_job(job_id, status="success", finished_at=_now_iso(), output=output, generated_files=generated_files_json)
     except Exception as exc:
@@ -950,6 +1136,10 @@ def printify_upload(payload: PrintifyUploadRequest) -> dict[str, Any]:
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Printify product creation failed: {exc}")
 
+    printify_url = _printify_product_url(str(product_id))
+    etsy_listing_id: str | None = None
+    etsy_url: str | None = None
+
     status = "Draft on Printify"
     if not payload.draft:
         try:
@@ -958,6 +1148,32 @@ def printify_upload(payload: PrintifyUploadRequest) -> dict[str, Any]:
         except Exception as exc:
             raise HTTPException(status_code=502, detail=f"Printify publish failed (product {product_id} created but not published): {exc}")
 
+        for _ in range(5):
+            try:
+                product = printify_get_product(str(product_id))
+                external = product.get("external", {}) if isinstance(product, dict) else {}
+                ext_id = external.get("id")
+                if ext_id:
+                    etsy_listing_id = str(ext_id)
+                    etsy_url = _etsy_listing_url(etsy_listing_id)
+                    break
+            except Exception:
+                pass
+            time.sleep(1.2)
+
+        if etsy_listing_id is None:
+            status = "Published (Etsy ID pending sync)"
+
+        # Auto-assign Etsy shop section
+        etsy_section = None
+        if etsy_listing_id and _ETSY_AVAILABLE:
+            try:
+                from .etsy.setup_service import auto_assign_section
+                front_code = cfg["code"]
+                etsy_section = auto_assign_section(etsy_listing_id, front_code, payload.productType)
+            except Exception:
+                pass  # Non-critical — section can be assigned manually
+
     try:
         printify_update_spreadsheet_ids(
             str(cfg["spreadsheet"]),
@@ -965,6 +1181,7 @@ def printify_upload(payload: PrintifyUploadRequest) -> dict[str, Any]:
             payload.filename,
             image_id=image_id,
             product_id=product_id,
+            etsy_id=etsy_listing_id,
             status=status,
         )
     except Exception as exc:
@@ -973,6 +1190,11 @@ def printify_upload(payload: PrintifyUploadRequest) -> dict[str, Any]:
             "filename": payload.filename,
             "imageId": image_id,
             "productId": product_id,
+            "printifyUrl": printify_url,
+            "etsyListingId": etsy_listing_id,
+            "etsyUrl": etsy_url,
+            "etsySyncPending": not payload.draft and etsy_listing_id is None,
+            "etsySection": etsy_section if not payload.draft else None,
             "status": status,
             "warning": f"Spreadsheet update failed: {exc}",
         }
@@ -981,5 +1203,10 @@ def printify_upload(payload: PrintifyUploadRequest) -> dict[str, Any]:
         "filename": payload.filename,
         "imageId": image_id,
         "productId": product_id,
+        "printifyUrl": printify_url,
+        "etsyListingId": etsy_listing_id,
+        "etsyUrl": etsy_url,
+        "etsySyncPending": not payload.draft and etsy_listing_id is None,
+        "etsySection": etsy_section if not payload.draft else None,
         "status": status,
     }

@@ -64,6 +64,28 @@ body {
   margin-bottom: 16px;
 }
 
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mobile-nav-toggle {
+  display: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  background: white;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0;
+}
+
+.mobile-nav-backdrop {
+  display: none;
+}
+
 .grid-4 {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -123,12 +145,60 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.sub-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 0;
+}
+
+.sub-tab {
+  padding: 8px 16px;
+  border: 1px solid #e5e7eb;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  background: #f9fafb;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sub-tab:hover {
+  background: #f1f5f9;
+  color: #334155;
+}
+
+.sub-tab.active {
+  background: white;
+  color: #111827;
+  border-color: #e5e7eb;
+  font-weight: 600;
+}
+
+.sub-tab-count {
+  display: inline-block;
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 10px;
+  margin-left: 6px;
+}
+
+.sub-tab.active .sub-tab-count {
+  background: #3b82f6;
+  color: white;
+}
+
 .table-wrap {
   background: white;
   border: 1px solid #e5e7eb;
-  border-radius: 12px;
+  border-radius: 0 12px 12px 12px;
   overflow: auto;
-  margin-top: 12px;
+  margin-top: 0;
 }
 
 table {
@@ -168,6 +238,18 @@ td {
   background: #e5e7eb;
   color: #374151;
 }
+.badge.legacy {
+  background: #fef3c7;
+  color: #92400e;
+  margin-left: 6px;
+  font-size: 0.7em;
+}
+.badge.new-gen {
+  background: #d1fae5;
+  color: #065f46;
+  margin-left: 6px;
+  font-size: 0.7em;
+}
 
 .section-title {
   margin: 0 0 8px;
@@ -175,6 +257,12 @@ td {
 
 .thumb-cell {
   min-width: 92px;
+}
+
+.date-cell {
+  white-space: nowrap;
+  font-size: 13px;
+  color: #64748b;
 }
 
 .thumb-button {
@@ -195,6 +283,28 @@ td {
 
 .thumb-empty {
   font-size: 12px;
+  color: #6b7280;
+}
+
+.link-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+}
+
+.table-link {
+  font-size: 12px;
+  color: #1d4ed8;
+  text-decoration: none;
+}
+
+.table-link:hover {
+  text-decoration: underline;
+}
+
+.table-note {
+  font-size: 11px;
   color: #6b7280;
 }
 
@@ -414,19 +524,30 @@ td {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (max-width: 1100px) {
   .app {
     grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
   }
   .sidebar {
     display: flex;
+    align-items: center;
     gap: 8px;
     overflow-x: auto;
+    padding: 14px;
+  }
+  .brand {
+    margin-bottom: 0;
+    white-space: nowrap;
   }
   .nav-item {
+    width: auto;
+    flex: 0 0 auto;
     white-space: nowrap;
     margin-bottom: 0;
   }
@@ -438,5 +559,381 @@ td {
   }
   .gen-modal-grid {
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: min(280px, 82vw);
+    padding: 16px;
+    display: block;
+    overflow-y: auto;
+    z-index: 40;
+    transform: translateX(-110%);
+    transition: transform 0.2s ease;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  .nav-item {
+    width: 100%;
+    margin-bottom: 8px;
+    font-size: 14px;
+    padding: 10px 12px;
+    border-radius: 8px;
+  }
+
+  .brand {
+    display: block;
+    margin-bottom: 14px;
+    font-size: 16px;
+  }
+
+  .mobile-nav-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .mobile-nav-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    border: none;
+    background: rgba(15, 23, 42, 0.52);
+    z-index: 30;
+    padding: 0;
+    margin: 0;
+    border-radius: 0;
+  }
+
+  .main {
+    padding: 14px;
+  }
+
+  .topbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .topbar .row {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .grid-4 {
+    grid-template-columns: 1fr;
+  }
+
+  .card {
+    padding: 12px;
+  }
+
+  .card .value {
+    font-size: 20px;
+  }
+
+  input,
+  select,
+  textarea {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .sub-tabs {
+    flex-wrap: wrap;
+    gap: 0;
+    margin-bottom: 0;
+  }
+
+  .sub-tab {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 8px 6px;
+    font-size: 12px;
+    text-align: center;
+    border-radius: 8px 8px 0 0;
+  }
+
+  .sub-tab-count {
+    display: block;
+    margin: 2px auto 0;
+    font-size: 10px;
+  }
+
+  .sub-tabs select {
+    flex: 0 0 100%;
+    margin-left: 0;
+    margin-top: 4px;
+    order: 10;
+  }
+
+  .table-wrap {
+    margin-top: 0;
+    -webkit-overflow-scrolling: touch;
+    border: none;
+    background: transparent;
+    overflow: visible;
+    border-radius: 0;
+  }
+
+  .designs-table,
+  .expenses-table,
+  .jobs-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  .designs-table thead,
+  .expenses-table thead,
+  .jobs-table thead {
+    display: none;
+  }
+
+  .designs-table tbody,
+  .expenses-table tbody,
+  .jobs-table tbody {
+    display: block;
+  }
+
+  .designs-table tr,
+  .expenses-table tr,
+  .jobs-table tr {
+    display: block;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 8px;
+    margin-bottom: 10px;
+  }
+
+  .designs-table td,
+  .expenses-table td,
+  .jobs-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    white-space: normal;
+    border-bottom: 1px solid #f1f5f9;
+    padding: 7px 4px;
+    font-size: 12px;
+  }
+
+  .designs-table td:last-child,
+  .expenses-table td:last-child,
+  .jobs-table td:last-child {
+    border-bottom: none;
+  }
+
+  .designs-table td::before,
+  .expenses-table td::before,
+  .jobs-table td::before {
+    font-size: 11px;
+    font-weight: 600;
+    color: #6b7280;
+    min-width: 86px;
+    flex: 0 0 86px;
+    content: "";
+  }
+
+  .designs-table td:nth-child(1)::before {
+    content: "Preview";
+  }
+  .designs-table td:nth-child(2)::before {
+    content: "Filename";
+  }
+  .designs-table td:nth-child(3)::before {
+    content: "Created";
+  }
+  .designs-table td:nth-child(4)::before {
+    content: "Type";
+  }
+  .designs-table td:nth-child(5)::before {
+    content: "Name/Phrase";
+  }
+  .designs-table td:nth-child(6)::before {
+    content: "IP Risk";
+  }
+  .designs-table td:nth-child(7)::before {
+    content: "Location";
+  }
+  .designs-table td:nth-child(8)::before {
+    content: "Status";
+  }
+  .designs-table td:nth-child(9)::before {
+    content: "Printify";
+  }
+  .designs-table td:nth-child(10)::before {
+    content: "Actions";
+  }
+
+  .expenses-table td:nth-child(1)::before {
+    content: "ID";
+  }
+  .expenses-table td:nth-child(2)::before {
+    content: "Date";
+  }
+  .expenses-table td:nth-child(3)::before {
+    content: "Front";
+  }
+  .expenses-table td:nth-child(4)::before {
+    content: "Category";
+  }
+  .expenses-table td:nth-child(5)::before {
+    content: "Description";
+  }
+  .expenses-table td:nth-child(6)::before {
+    content: "Amount";
+  }
+  .expenses-table td:nth-child(7)::before {
+    content: "Actions";
+  }
+
+  .jobs-table td:nth-child(1)::before {
+    content: "Job ID";
+  }
+  .jobs-table td:nth-child(2)::before {
+    content: "Type";
+  }
+  .jobs-table td:nth-child(3)::before {
+    content: "Mode";
+  }
+  .jobs-table td:nth-child(4)::before {
+    content: "Status";
+  }
+  .jobs-table td:nth-child(5)::before {
+    content: "Failure";
+  }
+  .jobs-table td:nth-child(6)::before {
+    content: "Created";
+  }
+  .jobs-table td:nth-child(7)::before {
+    content: "Started";
+  }
+  .jobs-table td:nth-child(8)::before {
+    content: "Finished";
+  }
+  .jobs-table td:nth-child(9)::before {
+    content: "Log";
+  }
+
+  .thumb-cell {
+    min-width: 74px;
+  }
+
+  .design-thumb {
+    width: 56px;
+    height: 56px;
+  }
+
+  td.row {
+    flex-direction: column;
+    align-items: stretch;
+    min-width: 120px;
+  }
+
+  .designs-table td.row,
+  .expenses-table td.row,
+  .jobs-table td.row {
+    display: flex;
+    gap: 6px;
+  }
+
+  .designs-table td.row::before,
+  .expenses-table td.row::before,
+  .jobs-table td.row::before {
+    align-self: flex-start;
+  }
+
+  .designs-table td.row button,
+  .expenses-table td.row button,
+  .jobs-table td.row button {
+    width: 100%;
+  }
+
+  .image-modal-overlay {
+    padding: 10px;
+  }
+
+  .image-modal-content {
+    width: 96vw;
+    padding: 10px;
+  }
+
+  .image-modal-nav {
+    width: 34px;
+    height: 34px;
+    font-size: 14px;
+  }
+
+  .image-modal-nav.left {
+    left: 8px;
+  }
+
+  .image-modal-nav.right {
+    right: 8px;
+  }
+
+  .gen-modal-content {
+    width: 96vw;
+    padding: 12px;
+    max-height: 92vh;
+  }
+
+  .gen-modal-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .gen-modal-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .gen-modal-actions button {
+    flex: 1 1 auto;
+  }
+
+  .job-log,
+  .gen-modal-log {
+    max-height: 220px;
+  }
+}
+
+@media (max-width: 520px) {
+  .brand {
+    font-size: 15px;
+  }
+
+  .nav-item {
+    font-size: 14px;
+    padding: 10px;
+  }
+
+  .main {
+    padding: 10px;
+  }
+
+  .badge {
+    font-size: 11px;
+    padding: 3px 7px;
+  }
+
+  .gen-modal-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .gen-modal-card-name {
+    white-space: normal;
+    word-break: break-word;
   }
 }

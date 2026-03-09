@@ -17,7 +17,19 @@
       "WebFetch(domain:www.postman.com)",
       "WebFetch(domain:bulk-pod-product-creator.com)",
       "WebFetch(domain:help.printify.com)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(pip show:*)",
+      "Bash(powershell.exe:*)",
+      "Bash(\"D:/Projects/POD business/webapp/backend/.venv313/Scripts/pip.exe\" install:*)",
+      "Bash(npx:*)",
+      "Bash(taskkill:*)",
+      "WebFetch(domain:platform.openai.com)",
+      "WebFetch(domain:openai.com)",
+      "WebFetch(domain:developers.pinterest.com)",
+      "WebFetch(domain:getlate.dev)",
+      "WebFetch(domain:postfa.st)",
+      "WebFetch(domain:pypi.org)",
+      "Bash(powershell:*)"
     ]
   }
 }

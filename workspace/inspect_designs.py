@@ -215,6 +215,41 @@ def add_text_overlay(base_image_path, phrase, output_path,
     print(f"  Text overlay saved: {output_path}")
 
 
+def trim_and_fill(filepath, target_w=4500, target_h=5400, padding_pct=0.05):
+    """
+    Trim transparent edges from a PNG and resize the content to fill
+    the target canvas, preserving aspect ratio. Centers on a transparent canvas.
+    """
+    img = Image.open(filepath).convert("RGBA")
+    bbox = img.getbbox()
+    if bbox is None:
+        print(f"  [SKIP] Fully transparent: {os.path.basename(filepath)}")
+        return filepath
+
+    cropped = img.crop(bbox)
+    cw, ch = cropped.size
+
+    pad_x = int(target_w * padding_pct)
+    pad_y = int(target_h * padding_pct)
+    avail_w = target_w - 2 * pad_x
+    avail_h = target_h - 2 * pad_y
+
+    scale = min(avail_w / cw, avail_h / ch)
+    new_w = int(cw * scale)
+    new_h = int(ch * scale)
+
+    resized = cropped.resize((new_w, new_h), Image.LANCZOS)
+
+    canvas = Image.new("RGBA", (target_w, target_h), (0, 0, 0, 0))
+    paste_x = (target_w - new_w) // 2
+    paste_y = (target_h - new_h) // 2
+    canvas.paste(resized, (paste_x, paste_y))
+
+    canvas.save(filepath, "PNG")
+    print(f"  [TRIM] {cw}x{ch} -> {new_w}x{new_h} on {target_w}x{target_h} canvas: {os.path.basename(filepath)}")
+    return filepath
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Design quality gate — validate PNGs for print readiness"
@@ -244,6 +279,13 @@ def main():
     usc = sub.add_parser("upscale", help="Upscale undersized designs")
     usc.add_argument("input", help="Input PNG or folder")
     usc.add_argument("--output", help="Output path (default: overwrite)")
+
+    # ── trim command ──
+    trm = sub.add_parser("trim", help="Trim transparent edges and fill print area")
+    trm.add_argument("--input", required=True, help="Input PNG file")
+    trm.add_argument("--width", type=int, default=4500, help="Target width (default: 4500)")
+    trm.add_argument("--height", type=int, default=5400, help="Target height (default: 5400)")
+    trm.add_argument("--padding", type=float, default=0.05, help="Padding as fraction (default: 0.05)")
 
     args = parser.parse_args()
 
@@ -275,6 +317,9 @@ def main():
                     upscale_if_needed(os.path.join(args.input, f))
         else:
             upscale_if_needed(args.input, args.output)
+
+    elif args.command == "trim":
+        trim_and_fill(args.input, args.width, args.height, args.padding)
 
     else:
         parser.print_help()

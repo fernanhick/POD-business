@@ -14,8 +14,10 @@ $BackendPython = Join-Path $BackendDir ".venv313\Scripts\python.exe"
 $RuntimeDir = Join-Path $Root ".runtime"
 $BackendPidFile = Join-Path $RuntimeDir "backend.pid"
 $FrontendPidFile = Join-Path $RuntimeDir "frontend.pid"
-$BackendLog = Join-Path $RuntimeDir "backend.log"
-$FrontendLog = Join-Path $RuntimeDir "frontend.log"
+$BackendLog = Join-Path $RuntimeDir "backend.out.log"
+$BackendErrLog = Join-Path $RuntimeDir "backend.err.log"
+$FrontendLog = Join-Path $RuntimeDir "frontend.out.log"
+$FrontendErrLog = Join-Path $RuntimeDir "frontend.err.log"
 
 function Ensure-RuntimeDir {
     if (-not (Test-Path $RuntimeDir)) {
@@ -33,16 +35,16 @@ function Read-Pid([string]$pidFile) {
         return $null
     }
 
-    [int]$pid = 0
-    if ([int]::TryParse($raw, [ref]$pid)) {
-        return $pid
+    [int]$procId = 0
+    if ([int]::TryParse($raw, [ref]$procId)) {
+        return $procId
     }
 
     return $null
 }
 
-function Write-Pid([string]$pidFile, [int]$pid) {
-    Set-Content -Path $pidFile -Value $pid -Encoding ascii
+function Write-Pid([string]$pidFile, [int]$procId) {
+    Set-Content -Path $pidFile -Value $procId -Encoding ascii
 }
 
 function Remove-Pid([string]$pidFile) {
@@ -51,12 +53,12 @@ function Remove-Pid([string]$pidFile) {
     }
 }
 
-function Is-ProcessRunning([int]$pid) {
-    if (-not $pid) {
+function Is-ProcessRunning([int]$procId) {
+    if (-not $procId) {
         return $false
     }
 
-    $process = Get-Process -Id $pid -ErrorAction SilentlyContinue
+    $process = Get-Process -Id $procId -ErrorAction SilentlyContinue
     return $null -ne $process
 }
 
@@ -68,6 +70,23 @@ function Test-Url([string]$url) {
     catch {
         return $false
     }
+}
+
+function Get-LanIPv4 {
+    try {
+        $ips = [System.Net.Dns]::GetHostAddresses([System.Net.Dns]::GetHostName()) |
+            Where-Object {
+                $_.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork -and
+                -not $_.IPAddressToString.StartsWith("127.") -and
+                -not $_.IPAddressToString.StartsWith("169.254.")
+            }
+        if ($ips -and $ips.Count -gt 0) {
+            return $ips[0].IPAddressToString
+        }
+    }
+    catch {
+    }
+    return $null
 }
 
 function Start-Backend {
@@ -87,17 +106,23 @@ function Start-Backend {
     }
 
     $proc = Start-Process -FilePath $BackendPython `
-        -ArgumentList "-m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload" `
+        -ArgumentList "-m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload" `
         -WorkingDirectory $BackendDir `
         -RedirectStandardOutput $BackendLog `
-        -RedirectStandardError $BackendLog `
+        -RedirectStandardError $BackendErrLog `
         -WindowStyle Hidden `
         -PassThru
 
     Write-Pid $BackendPidFile $proc.Id
     Start-Sleep -Seconds 2
     if (Is-ProcessRunning $proc.Id) {
-        Write-Output "Backend started (PID $($proc.Id)) at http://127.0.0.1:8000"
+        $lanIp = Get-LanIPv4
+        if ($lanIp) {
+            Write-Output "Backend started (PID $($proc.Id)) at http://127.0.0.1:8000 and http://$lanIp`:8000"
+        }
+        else {
+            Write-Output "Backend started (PID $($proc.Id)) at http://127.0.0.1:8000"
+        }
     }
     else {
         Remove-Pid $BackendPidFile
@@ -117,19 +142,25 @@ function Start-Frontend {
         return
     }
 
-    $npmCmd = "npm run dev -- --host 127.0.0.1 --port 5173"
+    $npmCmd = "npm run dev -- --host 0.0.0.0 --port 5173"
     $proc = Start-Process -FilePath "powershell.exe" `
         -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command $npmCmd" `
         -WorkingDirectory $FrontendDir `
         -RedirectStandardOutput $FrontendLog `
-        -RedirectStandardError $FrontendLog `
+        -RedirectStandardError $FrontendErrLog `
         -WindowStyle Hidden `
         -PassThru
 
     Write-Pid $FrontendPidFile $proc.Id
     Start-Sleep -Seconds 2
     if (Is-ProcessRunning $proc.Id) {
-        Write-Output "Frontend started (PID $($proc.Id)) at http://127.0.0.1:5173"
+        $lanIp = Get-LanIPv4
+        if ($lanIp) {
+            Write-Output "Frontend started (PID $($proc.Id)) at http://127.0.0.1:5173 and http://$lanIp`:5173"
+        }
+        else {
+            Write-Output "Frontend started (PID $($proc.Id)) at http://127.0.0.1:5173"
+        }
     }
     else {
         Remove-Pid $FrontendPidFile
@@ -138,18 +169,18 @@ function Start-Frontend {
 }
 
 function Stop-Service([string]$name, [string]$pidFile) {
-    $pid = Read-Pid $pidFile
-    if (-not $pid) {
+    $procId = Read-Pid $pidFile
+    if (-not $procId) {
         Write-Output "$name is not running (no PID file)."
         return
     }
 
-    if (Is-ProcessRunning $pid) {
-        Stop-Process -Id $pid -Force
-        Write-Output "$name stopped (PID $pid)."
+    if (Is-ProcessRunning $procId) {
+        Stop-Process -Id $procId -Force
+        Write-Output "$name stopped (PID $procId)."
     }
     else {
-        Write-Output "$name already stopped (stale PID $pid)."
+        Write-Output "$name already stopped (stale PID $procId)."
     }
 
     Remove-Pid $pidFile
@@ -162,21 +193,25 @@ function Show-Status {
     $backendRunning = $backendPid -and (Is-ProcessRunning $backendPid)
     $frontendRunning = $frontendPid -and (Is-ProcessRunning $frontendPid)
 
+    $lanIp = Get-LanIPv4
+    $backendLanUrl = if ($lanIp) { " (LAN: http://$lanIp`:8000)" } else { "" }
+    $frontendLanUrl = if ($lanIp) { " (LAN: http://$lanIp`:5173)" } else { "" }
+
     if ($backendRunning) {
-        Write-Output "Backend: running (PID $backendPid) -> http://127.0.0.1:8000"
+        Write-Output "Backend: running (PID $backendPid) -> http://127.0.0.1:8000$backendLanUrl"
     }
     elseif (Test-Url "http://127.0.0.1:8000/docs") {
-        Write-Output "Backend: running (unmanaged PID) -> http://127.0.0.1:8000"
+        Write-Output "Backend: running (unmanaged PID) -> http://127.0.0.1:8000$backendLanUrl"
     }
     else {
         Write-Output "Backend: stopped"
     }
 
     if ($frontendRunning) {
-        Write-Output "Frontend: running (PID $frontendPid) -> http://127.0.0.1:5173"
+        Write-Output "Frontend: running (PID $frontendPid) -> http://127.0.0.1:5173$frontendLanUrl"
     }
     elseif (Test-Url "http://127.0.0.1:5173") {
-        Write-Output "Frontend: running (unmanaged PID) -> http://127.0.0.1:5173"
+        Write-Output "Frontend: running (unmanaged PID) -> http://127.0.0.1:5173$frontendLanUrl"
     }
     else {
         Write-Output "Frontend: stopped"

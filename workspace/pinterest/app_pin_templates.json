@@ -1,0 +1,97 @@
+[
+  {
+    "id": "app_promo_collection",
+    "name": "Collection Manager",
+    "pin_type": "app_promo",
+    "background": "#1a1a1a",
+    "footer_accent": "#E8500A",
+    "headline_placeholder": "Manage Your Collection",
+    "keyword_categories": ["sneaker_culture"],
+    "pre_launch": {
+      "title": "The Ultimate Sneaker Collection App is Coming",
+      "cta": "Join the waitlist",
+      "description": "Track, organize, and showcase your sneaker collection. Sign up to be first in line."
+    },
+    "launched": {
+      "title": "Manage Your Sneaker Collection Like a Pro",
+      "cta": "Download now",
+      "description": "Track every pair, organize by brand, and share your collection with the community."
+    }
+  },
+  {
+    "id": "app_promo_discover",
+    "name": "Discover Drops",
+    "pin_type": "app_promo",
+    "background": "#1a1a1a",
+    "footer_accent": "#E8500A",
+    "headline_placeholder": "Never Miss a Drop",
+    "keyword_categories": ["sneaker_culture"],
+    "pre_launch": {
+      "title": "Never Miss Another Sneaker Drop",
+      "cta": "Get early access",
+      "description": "Real-time drop alerts, release calendars, and instant checkout links. Coming soon."
+    },
+    "launched": {
+      "title": "Never Miss Another Sneaker Drop",
+      "cta": "Download free",
+      "description": "Get real-time drop alerts, release calendars, and instant checkout links."
+    }
+  },
+  {
+    "id": "app_promo_community",
+    "name": "Join the Community",
+    "pin_type": "app_promo",
+    "background": "#222222",
+    "footer_accent": "#E8500A",
+    "headline_placeholder": "Join the Culture",
+    "keyword_categories": ["sneaker_culture", "outfits_style"],
+    "pre_launch": {
+      "title": "A Community Built for Sneaker Culture",
+      "cta": "Sign up for updates",
+      "description": "Connect with collectors, share your rotation, and discover new styles. Launching soon."
+    },
+    "launched": {
+      "title": "Join the Sneaker Culture Community",
+      "cta": "Join free",
+      "description": "Connect with collectors, share your rotation, and discover the latest styles."
+    }
+  },
+  {
+    "id": "app_promo_outfit",
+    "name": "Style Your Kicks",
+    "pin_type": "app_promo",
+    "background": "#222222",
+    "footer_accent": "#E8500A",
+    "headline_placeholder": "Style Your Kicks",
+    "keyword_categories": ["outfits_style", "sneaker_culture"],
+    "pre_launch": {
+      "title": "AI-Powered Outfit Matching for Your Sneakers",
+      "cta": "Be the first to try",
+      "description": "Get outfit suggestions based on your sneaker collection. Sign up for early access."
+    },
+    "launched": {
+      "title": "Match Outfits to Your Sneakers with AI",
+      "cta": "Try it free",
+      "description": "Upload your kicks, get instant outfit suggestions. Style made simple."
+    }
+  },
+  {
+    "id": "app_promo_value",
+    "name": "Track Value",
+    "pin_type": "app_promo",
+    "background": "#1a1a1a",
+    "footer_accent": "#E8500A",
+    "headline_placeholder": "Know Your Worth",
+    "keyword_categories": ["sneaker_culture"],
+    "pre_launch": {
+      "title": "Track Your Sneaker Collection Value in Real-Time",
+      "cta": "Get notified at launch",
+      "description": "See your collection's market value update daily. Know what your grails are worth."
+    },
+    "launched": {
+      "title": "Your Sneaker Portfolio, Tracked in Real-Time",
+      "cta": "Start tracking free",
+      "description": "See daily market values for every pair. Know exactly what your collection is worth."
+    }
+  }
+]
