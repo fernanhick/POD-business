@@ -349,6 +349,82 @@ def auto_assign_section(listing_id: str, front: str, product_type: str) -> str |
     return None
 
 
+def create_draft_listing(
+    *,
+    title: str,
+    description: str,
+    price: float,
+    quantity: int = 999,
+) -> str:
+    """
+    Create an Etsy draft listing using app credentials/tokens from setup flow.
+
+    Requires these environment variables (or DB-backed settings loaded into env):
+    - ETSY_SHIPPING_PROFILE_ID
+    - ETSY_RETURN_POLICY_ID
+    - ETSY_PROCESSING_PROFILE_ID
+    - ETSY_TAXONOMY_ID
+    """
+    load_credentials_to_env()
+
+    shipping_profile_id = os.environ.get("ETSY_SHIPPING_PROFILE_ID", "").strip()
+    return_policy_id = os.environ.get("ETSY_RETURN_POLICY_ID", "").strip()
+    processing_profile_id = os.environ.get("ETSY_PROCESSING_PROFILE_ID", "").strip()
+    taxonomy_id = os.environ.get("ETSY_TAXONOMY_ID", "").strip()
+
+    missing = []
+    if not shipping_profile_id:
+        missing.append("ETSY_SHIPPING_PROFILE_ID")
+    if not return_policy_id:
+        missing.append("ETSY_RETURN_POLICY_ID")
+    if not processing_profile_id:
+        missing.append("ETSY_PROCESSING_PROFILE_ID")
+    if not taxonomy_id:
+        missing.append("ETSY_TAXONOMY_ID")
+    if missing:
+        raise RuntimeError("Missing Etsy listing config: " + ", ".join(missing))
+
+    shop_id = get_numeric_shop_id()
+    payload = {
+        "quantity": str(max(1, int(quantity))),
+        "title": title[:140],
+        "description": description,
+        "price": f"{float(price):.2f}",
+        "who_made": "i_did",
+        "when_made": "made_to_order",
+        "taxonomy_id": str(int(taxonomy_id)),
+        "shipping_profile_id": str(int(shipping_profile_id)),
+        "return_policy_id": str(int(return_policy_id)),
+        "processing_profile_id": str(int(processing_profile_id)),
+        "is_supply": "false",
+        "type": "physical",
+        "state": "draft",
+        "should_auto_renew": "true",
+    }
+
+    with httpx.Client(timeout=30.0) as client:
+        resp = client.post(
+            f"{ETSY_API_BASE}/application/shops/{shop_id}/listings",
+            headers={
+                "Authorization": _headers().get("Authorization", ""),
+                "x-api-key": _headers().get("x-api-key", ""),
+            },
+            data=payload,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+    listing_id = data.get("listing_id")
+    if listing_id is None:
+        results = data.get("results") if isinstance(data, dict) else None
+        if isinstance(results, list) and results:
+            listing_id = results[0].get("listing_id")
+    if listing_id is None:
+        raise RuntimeError(f"Unexpected Etsy listing create response: {data}")
+
+    return str(listing_id)
+
+
 def get_setup_status() -> dict:
     has_api_key = bool(os.environ.get("ETSY_API_KEY") or _db_get("ETSY_API_KEY"))
     has_secret = bool(os.environ.get("ETSY_SHARED_SECRET") or _db_get("ETSY_SHARED_SECRET"))

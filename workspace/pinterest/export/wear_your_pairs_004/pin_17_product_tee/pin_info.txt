@@ -1,0 +1,26 @@
+═══════════════════════════════════════════
+ PIN 17 — product_tee
+═══════════════════════════════════════════
+
+BOARD:
+Streetwear Culture
+
+TITLE:
+Wear Your Pairs 004 | 90s fashion comeback
+
+DESCRIPTION:
+Wear Your Pairs 004 | Shop now | #90sfashioncomeback #shoegamestrong #sneakermuseumaesthetic #airportoutfitideas #grailsneakersdisplay
+
+DESTINATION LINK:
+https://www.etsy.com/shop/RotationClub
+
+ALT TEXT:
+Wear Your Pairs 004 - Sneaker culture graphic tee by RotationClub
+
+───────────────────────────────────────────
+KEYWORDS (for reference):
+90s fashion comeback,shoe game strong,sneaker museum aesthetic,airport outfit ideas,grail sneakers display
+
+PIN TYPE: product
+DESIGN: wear_your_pairs_004.png
+═══════════════════════════════════════════

@@ -22,7 +22,10 @@ async function request(path, options = {}) {
     let message;
     try {
       const body = await response.json();
-      message = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail || body);
+      message =
+        typeof body.detail === "string"
+          ? body.detail
+          : JSON.stringify(body.detail || body);
     } catch {
       message = await response.text().catch(() => "");
     }
@@ -69,6 +72,7 @@ export const api = {
     return `${API_BASE}/designs/image?${query}`;
   },
   printifyStatus: () => request("/printify/status"),
+  podProviderStatus: () => request("/pod/provider-status"),
   printifyUpload: (payload) =>
     request("/printify/upload", {
       method: "POST",

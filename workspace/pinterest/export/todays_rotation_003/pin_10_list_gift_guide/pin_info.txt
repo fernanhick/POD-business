@@ -1,0 +1,26 @@
+═══════════════════════════════════════════
+ PIN 10 — list_gift_guide
+═══════════════════════════════════════════
+
+BOARD:
+Gifts for Sneakerheads
+
+TITLE:
+Todays Rotation 003 | handmade gift inspiration
+
+DESCRIPTION:
+Todays Rotation 003 | Find the perfect gift | #handmadegiftinspiration #bestwaytoorganizesneakers #giftsforteens #techgiftguide #housewarminggiftguide
+
+DESTINATION LINK:
+https://www.etsy.com/shop/RotationClub
+
+ALT TEXT:
+Todays Rotation 003 - Sneaker culture graphic tee by RotationClub
+
+───────────────────────────────────────────
+KEYWORDS (for reference):
+handmade gift inspiration,best way to organize sneakers,gifts for teens,tech gift guide,housewarming gift guide
+
+PIN TYPE: list
+DESIGN: todays_rotation_003.png
+═══════════════════════════════════════════

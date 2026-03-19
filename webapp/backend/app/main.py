@@ -41,6 +41,29 @@ try:
 except ImportError:
     _PRINTIFY_AVAILABLE = False
 
+# Import regional pricing engine
+try:
+    from pod_pricing import (
+        get_profile_for_provider_market,
+        US_PRINTIFY,
+        EU_STANDARD_21,
+    )
+    _POD_PRICING_AVAILABLE = True
+except ImportError:
+    _POD_PRICING_AVAILABLE = False
+
+try:
+    from pod_providers import PROVIDER_REGISTRY
+    _POD_PROVIDERS_AVAILABLE = True
+except ImportError:
+    _POD_PROVIDERS_AVAILABLE = False
+
+try:
+    from printful_upload import get_product_config as printful_get_product_config
+    _PRINTFUL_CONFIG_AVAILABLE = True
+except ImportError:
+    _PRINTFUL_CONFIG_AVAILABLE = False
+
 try:
     from .pinterest import router as pinterest_router
     _PINTEREST_AVAILABLE = True
@@ -145,7 +168,10 @@ class PrintifyUploadRequest(BaseModel):
     designType: Literal["general", "sneaker"]
     filename: str
     productType: Literal["tshirt", "hoodie"] = "tshirt"
+    provider: Literal["printify", "printful"] = "printify"  # Provider choice
+    market: Literal["US", "EU"] | None = None  # Market region (defaults by provider)
     draft: bool = False
+    country: str | None = None  # Optional for EU VAT bucket selection
 
 
 class ExpenseCreate(BaseModel):
@@ -320,6 +346,41 @@ def _header_map(ws) -> dict[str, int]:
     }
 
 
+def _ensure_header_column(ws, headers: dict[str, int], name: str) -> int:
+    column = headers.get(name)
+    if column:
+        return column
+    column = ws.max_column + 1
+    ws.cell(row=2, column=column, value=name)
+    headers[name] = column
+    return column
+
+
+def _update_upload_metadata(
+    spreadsheet_path: Path,
+    filename: str,
+    provider: str,
+    market: str,
+) -> None:
+    wb = load_workbook(spreadsheet_path)
+    ws = wb["Designs"]
+    headers = _header_map(ws)
+
+    filename_col = headers.get("Filename", 2)
+    provider_col = _ensure_header_column(ws, headers, "POD Provider")
+    market_col = _ensure_header_column(ws, headers, "POD Market")
+
+    for row in range(3, ws.max_row + 1):
+        value = ws.cell(row=row, column=filename_col).value
+        if value and str(value).strip() == filename.strip():
+            ws.cell(row=row, column=provider_col, value=provider)
+            ws.cell(row=row, column=market_col, value=market)
+            break
+
+    wb.save(spreadsheet_path)
+    wb.close()
+
+
 def _date_value_to_sort_ts(value: Any) -> float:
     if value is None:
         return 0.0
@@ -392,6 +453,8 @@ def _read_design_rows(design_type: str) -> list[dict[str, Any]]:
             "printifyImageId": ws.cell(row=row, column=headers["Printify Image ID"]).value if "Printify Image ID" in headers else None,
             "printifyProductId": ws.cell(row=row, column=headers["Printify Product ID"]).value if "Printify Product ID" in headers else None,
             "etsyListingId": ws.cell(row=row, column=headers["Etsy Listing ID"]).value if "Etsy Listing ID" in headers else None,
+            "podProvider": ws.cell(row=row, column=headers["POD Provider"]).value if "POD Provider" in headers else None,
+            "podMarket": ws.cell(row=row, column=headers["POD Market"]).value if "POD Market" in headers else None,
         }
         row_data["printifyUrl"] = _printify_product_url(str(row_data["printifyProductId"]) if row_data["printifyProductId"] else None)
         row_data["etsyUrl"] = _etsy_listing_url(str(row_data["etsyListingId"]) if row_data["etsyListingId"] else None)
@@ -1104,14 +1167,209 @@ def printify_status() -> dict[str, Any]:
     }
 
 
+def _validate_printful_store_for_api() -> tuple[bool, str | None]:
+    api_key = os.environ.get("PRINTFUL_API_KEY", "").strip()
+    store_id = os.environ.get("PRINTFUL_STORE_ID", "").strip()
+    if not api_key:
+        return False, "PRINTFUL_API_KEY not configured"
+    if not store_id:
+        return False, "PRINTFUL_STORE_ID not configured"
+
+    base = os.environ.get("PRINTFUL_API_BASE", "https://api.printful.com").rstrip("/")
+    try:
+        import requests as _req
+
+        resp = _req.get(
+            f"{base}/stores",
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        stores = resp.json().get("result", [])
+    except Exception as exc:
+        return False, f"Unable to validate Printful store: {exc}"
+
+    match = None
+    for store in stores:
+        if str(store.get("id")) == store_id:
+            match = store
+            break
+
+    if not match:
+        return False, f"PRINTFUL_STORE_ID={store_id} not found for this API key"
+
+    store_type = str(match.get("type") or "").strip().lower()
+    allowed_types = {"api", "manual", "manual_order", "native"}
+    if store_type not in allowed_types:
+        return (
+            False,
+            (
+                f"Printful store type '{store_type or 'unknown'}' is not supported for product creation. "
+                "Use a Manual Order/API Printful store and set PRINTFUL_STORE_ID to that store ID."
+            ),
+        )
+
+    return True, None
+
+
+@app.get("/api/pod/provider-status")
+def pod_provider_status() -> dict[str, Any]:
+    """
+    Return provider/market capabilities for UI readiness checks and status display.
+    """
+    printify_configured = _PRINTIFY_AVAILABLE and bool(os.environ.get("PRINTIFY_TOKEN")) and bool(os.environ.get("PRINTIFY_SHOP_ID"))
+    printful_configured = bool(os.environ.get("PRINTFUL_API_KEY"))
+    printful_issue: str | None = None
+    if _POD_PROVIDERS_AVAILABLE:
+        try:
+            printify_configured = PROVIDER_REGISTRY.is_configured("printify")
+        except Exception:
+            pass
+        try:
+            printful_configured = PROVIDER_REGISTRY.is_configured("printful")
+        except Exception:
+            pass
+
+    if printful_configured:
+        ok, issue = _validate_printful_store_for_api()
+        if not ok:
+            printful_configured = False
+            printful_issue = issue
+    
+    return {
+        "providers": {
+            "printify": {
+                "configured": printify_configured,
+                "market": "US",
+                "channel": "Etsy (US shop)",
+                "description": "Accessible US pricing",
+            },
+            "printful": {
+                "configured": printful_configured,
+                "market": "EU",
+                "channel": "Etsy (EU shop)",
+                "description": "EU-focused pricing",
+                "issue": printful_issue,
+            },
+        },
+        "timestamp": datetime.now().isoformat(),
+    }
+
+
+@app.get("/api/pod/printful/catalog")
+def printful_catalog(q: str = "", limit: int = Query(default=20, le=100)) -> dict[str, Any]:
+    """
+    Search the Printful product catalog.
+    Use ?q=t-shirt or ?q=hoodie to filter by name/type.
+    Returns product id, name, and type — feed the id to /variants/{id} next.
+    """
+    api_key = os.environ.get("PRINTFUL_API_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=400, detail="PRINTFUL_API_KEY not configured")
+    base = os.environ.get("PRINTFUL_API_BASE", "https://api.printful.com").rstrip("/")
+    try:
+        import requests as _req
+        resp = _req.get(f"{base}/products", headers={"Authorization": f"Bearer {api_key}"}, timeout=15)
+        resp.raise_for_status()
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Printful catalog request failed: {exc}") from exc
+
+    products = resp.json().get("result", [])
+    q_lower = q.lower()
+    matches = [
+        {
+            "id": p.get("id"),
+            "name": p.get("model", "") or p.get("name", ""),
+            "brand": p.get("brand", ""),
+            "type": p.get("type_name", ""),
+        }
+        for p in products
+        if not q_lower
+        or q_lower in (p.get("model") or p.get("name", "") or "").lower()
+        or q_lower in (p.get("type_name", "") or "").lower()
+    ]
+    return {"count": len(matches), "products": matches[:limit]}
+
+
+@app.get("/api/pod/printful/variants/{product_id}")
+def printful_variants(product_id: int) -> dict[str, Any]:
+    """
+    Return all variant IDs, sizes, and colors for a Printful catalog product.
+    Copy the ids you want into PRINTFUL_TSHIRT_VARIANT_IDS / PRINTFUL_HOODIE_VARIANT_IDS.
+    """
+    api_key = os.environ.get("PRINTFUL_API_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=400, detail="PRINTFUL_API_KEY not configured")
+    base = os.environ.get("PRINTFUL_API_BASE", "https://api.printful.com").rstrip("/")
+    try:
+        import requests as _req
+        resp = _req.get(
+            f"{base}/products/{product_id}",
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=15,
+        )
+        resp.raise_for_status()
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Printful variants request failed: {exc}") from exc
+
+    data = resp.json().get("result", {})
+    product = data.get("product", {})
+    raw_variants = data.get("variants", [])
+    variants = [
+        {
+            "id": v.get("id"),
+            "name": v.get("name", ""),
+            "size": v.get("size", ""),
+            "color": v.get("color", ""),
+            "in_stock": v.get("availability_status") != "discontinued",
+        }
+        for v in raw_variants
+    ]
+    # Group by color for easy copy-paste of same-color IDs
+    by_color: dict[str, list] = {}
+    for v in variants:
+        by_color.setdefault(v["color"], []).append(v)
+
+    return {
+        "product_id": product_id,
+        "product_name": product.get("model", "") or product.get("name", ""),
+        "total_variants": len(variants),
+        "all_ids": [v["id"] for v in variants],
+        "by_color": by_color,
+    }
+
+
 @app.post("/api/printify/upload")
 def printify_upload(payload: PrintifyUploadRequest) -> dict[str, Any]:
+    # ── Guardrails: Validate provider/market combination ────────────
+    if payload.provider == "printify" and payload.market == "EU":
+        raise HTTPException(
+            status_code=400,
+            detail="Printify is configured for US market only. Use Printful for EU.",
+        )
+    if payload.provider == "printful" and payload.market == "US":
+        raise HTTPException(
+            status_code=400,
+            detail="Printful is configured for EU market only. Use Printify for US.",
+        )
+
+    if payload.provider == "printful":
+        ok, issue = _validate_printful_store_for_api()
+        if not ok:
+            raise HTTPException(status_code=400, detail=issue)
+    
+    # ── Apply market defaults by provider ─────────────────────────────
+    if payload.market is None:
+        payload.market = "US" if payload.provider == "printify" else "EU"
+    
     if not _PRINTIFY_AVAILABLE:
         raise HTTPException(status_code=500, detail="printify_upload module not available")
+    if not _POD_PROVIDERS_AVAILABLE:
+        raise HTTPException(status_code=500, detail="pod_providers module not available")
 
     token = os.environ.get("PRINTIFY_TOKEN")
     shop_id = os.environ.get("PRINTIFY_SHOP_ID")
-    if not token or not shop_id:
+    if payload.provider == "printify" and (not token or not shop_id):
         raise HTTPException(status_code=500, detail="PRINTIFY_TOKEN or PRINTIFY_SHOP_ID not configured")
 
     cfg = FRONT_CONFIG[payload.designType]
@@ -1120,37 +1378,63 @@ def printify_upload(payload: PrintifyUploadRequest) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="Design not found in approved folder. Only approved designs can be uploaded.")
 
     front_code = cfg["code"]
-    front_cfg = PRINTIFY_CONFIG[front_code]
-    pcfg = front_cfg["products"][payload.productType]
+    if payload.provider == "printful":
+        if not _PRINTFUL_CONFIG_AVAILABLE:
+            raise HTTPException(status_code=500, detail="printful_upload config helper not available")
+        try:
+            pcfg = printful_get_product_config(front_code, payload.productType)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Printful config error: {exc}")
+    else:
+        front_cfg = PRINTIFY_CONFIG[front_code]
+        pcfg = front_cfg["products"][payload.productType]
+
     base_name = filepath.stem.replace("_", " ").title()
     title = pcfg["title_template"].format(name=base_name)
     description = pcfg["description_template"]
 
     try:
-        image_id = printify_upload_image(str(filepath))
+        adapter = PROVIDER_REGISTRY.get_adapter(payload.provider)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Printify image upload failed: {exc}")
+        raise HTTPException(status_code=400, detail=f"Provider not supported: {exc}")
+
+    if not adapter.check_config():
+        if payload.provider == "printify":
+            raise HTTPException(status_code=500, detail="Printify credentials not configured")
+        raise HTTPException(status_code=500, detail="Printful credentials not configured")
 
     try:
-        product_id = printify_create_product(image_id, title, description, pcfg, design_name=base_name)
+        image_id = adapter.upload_image(str(filepath))
+    except NotImplementedError as exc:
+        raise HTTPException(status_code=501, detail=str(exc))
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Printify product creation failed: {exc}")
+        raise HTTPException(status_code=502, detail=f"{payload.provider.title()} image upload failed: {exc}")
 
-    printify_url = _printify_product_url(str(product_id))
+    try:
+        created = adapter.create_product(image_id, title, description, pcfg, design_name=base_name)
+        product_id = created.product_id
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"{payload.provider.title()} product creation failed: {exc}")
+
+    printify_url = created.provider_url if payload.provider == "printful" else _printify_product_url(str(product_id))
     etsy_listing_id: str | None = None
     etsy_url: str | None = None
+    etsy_sync_error: str | None = None
+    etsy_section = None
 
-    status = "Draft on Printify"
+    status = f"Draft on {payload.provider.title()}"
     if not payload.draft:
         try:
-            printify_publish_product(product_id)
+            adapter.publish_product(str(product_id))
             status = "Published"
+        except NotImplementedError as exc:
+            raise HTTPException(status_code=501, detail=str(exc))
         except Exception as exc:
-            raise HTTPException(status_code=502, detail=f"Printify publish failed (product {product_id} created but not published): {exc}")
+            raise HTTPException(status_code=502, detail=f"{payload.provider.title()} publish failed (product {product_id} created but not published): {exc}")
 
         for _ in range(5):
             try:
-                product = printify_get_product(str(product_id))
+                product = adapter.get_product(str(product_id))
                 external = product.get("external", {}) if isinstance(product, dict) else {}
                 ext_id = external.get("id")
                 if ext_id:
@@ -1164,8 +1448,23 @@ def printify_upload(payload: PrintifyUploadRequest) -> dict[str, Any]:
         if etsy_listing_id is None:
             status = "Published (Etsy ID pending sync)"
 
+        if etsy_listing_id is None and _ETSY_AVAILABLE:
+            try:
+                from .etsy.setup_service import create_draft_listing
+
+                draft_listing_id = create_draft_listing(
+                    title=title,
+                    description=description,
+                    price=float((pcfg.get("price") or 29.99)),
+                    quantity=999,
+                )
+                etsy_listing_id = str(draft_listing_id)
+                etsy_url = _etsy_listing_url(etsy_listing_id)
+                status = "Published + Etsy draft created"
+            except Exception as exc:
+                etsy_sync_error = str(exc)
+
         # Auto-assign Etsy shop section
-        etsy_section = None
         if etsy_listing_id and _ETSY_AVAILABLE:
             try:
                 from .etsy.setup_service import auto_assign_section
@@ -1184,6 +1483,12 @@ def printify_upload(payload: PrintifyUploadRequest) -> dict[str, Any]:
             etsy_id=etsy_listing_id,
             status=status,
         )
+        _update_upload_metadata(
+            cfg["spreadsheet"],
+            payload.filename,
+            provider=payload.provider,
+            market=payload.market,
+        )
     except Exception as exc:
         # Product was uploaded successfully, just spreadsheet update failed — still return success
         return {
@@ -1191,11 +1496,15 @@ def printify_upload(payload: PrintifyUploadRequest) -> dict[str, Any]:
             "imageId": image_id,
             "productId": product_id,
             "printifyUrl": printify_url,
+            "providerUrl": printify_url,
             "etsyListingId": etsy_listing_id,
             "etsyUrl": etsy_url,
             "etsySyncPending": not payload.draft and etsy_listing_id is None,
             "etsySection": etsy_section if not payload.draft else None,
             "status": status,
+            "provider": payload.provider,
+            "market": payload.market,
+            "etsySyncError": etsy_sync_error,
             "warning": f"Spreadsheet update failed: {exc}",
         }
 
@@ -1204,9 +1513,13 @@ def printify_upload(payload: PrintifyUploadRequest) -> dict[str, Any]:
         "imageId": image_id,
         "productId": product_id,
         "printifyUrl": printify_url,
+        "providerUrl": printify_url,
         "etsyListingId": etsy_listing_id,
         "etsyUrl": etsy_url,
         "etsySyncPending": not payload.draft and etsy_listing_id is None,
         "etsySection": etsy_section if not payload.draft else None,
         "status": status,
+        "provider": payload.provider,
+        "market": payload.market,
+        "etsySyncError": etsy_sync_error,
     }

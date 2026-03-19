@@ -119,7 +119,11 @@ export function App() {
   });
   const [genModal, setGenModal] = useState(null);
   const genModalLogRef = useRef(null);
-  const [printifyConfigured, setPrintifyConfigured] = useState(false);
+  const [providerStatus, setProviderStatus] = useState({
+    printify: { configured: false, market: "US" },
+    printful: { configured: false, market: "EU" },
+  });
+  const [selectedProviderByFile, setSelectedProviderByFile] = useState({});
   const [uploadingDesign, setUploadingDesign] = useState(null);
 
   const loadAll = useCallback(async (silent = false) => {
@@ -154,16 +158,36 @@ export function App() {
 
   useEffect(() => {
     api
-      .printifyStatus()
-      .then((res) => setPrintifyConfigured(res.configured))
+      .podProviderStatus()
+      .then((res) => {
+        const providers = res?.providers || {};
+        setProviderStatus({
+          printify: providers.printify || { configured: false, market: "US" },
+          printful: providers.printful || { configured: false, market: "EU" },
+        });
+      })
       .catch(() => {});
   }, []);
 
-  const handlePrintifyUpload = async (designType, filename) => {
-    setUploadingDesign(filename);
+  const handlePrintifyUpload = async (
+    designType,
+    filename,
+    productType = "tshirt",
+    provider = "printify",
+  ) => {
+    const market = provider === "printful" ? "EU" : "US";
+    const uploadKey = `${filename}:${provider}:${productType}`;
+    setUploadingDesign(uploadKey);
     setError("");
     try {
-      await api.printifyUpload({ designType, filename, draft: false });
+      await api.printifyUpload({
+        designType,
+        filename,
+        productType,
+        provider,
+        market,
+        draft: false,
+      });
       await loadAll(true);
     } catch (err) {
       setError(err.message);
@@ -193,7 +217,8 @@ export function App() {
       if (designSubTab === "pipeline") {
         if (item.location !== "generated") return false;
       } else if (designSubTab === "approved") {
-        if (item.location !== "approved" || item.printifyProductId) return false;
+        if (item.location !== "approved" || item.printifyProductId)
+          return false;
       } else if (designSubTab === "published") {
         if (!item.printifyProductId) return false;
       } else if (designSubTab === "rejected") {
@@ -609,14 +634,25 @@ export function App() {
                 >
                   {t.label}
                   <span className="sub-tab-count">
-                    {designs.filter((d) => {
-                      if (designFilters.designType && d.designType !== designFilters.designType) return false;
-                      if (t.id === "pipeline") return d.location === "generated";
-                      if (t.id === "approved") return d.location === "approved" && !d.printifyProductId;
-                      if (t.id === "published") return !!d.printifyProductId;
-                      if (t.id === "rejected") return d.location === "rejected";
-                      return false;
-                    }).length}
+                    {
+                      designs.filter((d) => {
+                        if (
+                          designFilters.designType &&
+                          d.designType !== designFilters.designType
+                        )
+                          return false;
+                        if (t.id === "pipeline")
+                          return d.location === "generated";
+                        if (t.id === "approved")
+                          return (
+                            d.location === "approved" && !d.printifyProductId
+                          );
+                        if (t.id === "published") return !!d.printifyProductId;
+                        if (t.id === "rejected")
+                          return d.location === "rejected";
+                        return false;
+                      }).length
+                    }
                   </span>
                 </button>
               ))}
@@ -761,22 +797,102 @@ export function App() {
                           </button>
                         )}
                         {item.location === "approved" &&
-                          !item.printifyProductId &&
-                          printifyConfigured && (
-                            <button
-                              className="primary"
-                              disabled={uploadingDesign === item.filename}
-                              onClick={() =>
-                                handlePrintifyUpload(
-                                  item.designType,
-                                  item.filename,
-                                )
-                              }
-                            >
-                              {uploadingDesign === item.filename
-                                ? "Uploading..."
-                                : "Upload"}
-                            </button>
+                          (providerStatus.printify.configured ||
+                            providerStatus.printful.configured) && (
+                            <>
+                              <select
+                                value={
+                                  selectedProviderByFile[item.filename] ||
+                                  (providerStatus.printify.configured
+                                    ? "printify"
+                                    : "printful")
+                                }
+                                onChange={(e) =>
+                                  setSelectedProviderByFile((old) => ({
+                                    ...old,
+                                    [item.filename]: e.target.value,
+                                  }))
+                                }
+                              >
+                                <option
+                                  value="printify"
+                                  disabled={!providerStatus.printify.configured}
+                                >
+                                  Printify (US)
+                                </option>
+                                <option
+                                  value="printful"
+                                  disabled={!providerStatus.printful.configured}
+                                >
+                                  Printful (EU)
+                                </option>
+                              </select>
+                              <button
+                                className="primary"
+                                disabled={
+                                  uploadingDesign ===
+                                  `${item.filename}:${
+                                    selectedProviderByFile[item.filename] ||
+                                    (providerStatus.printify.configured
+                                      ? "printify"
+                                      : "printful")
+                                  }:tshirt`
+                                }
+                                onClick={() =>
+                                  handlePrintifyUpload(
+                                    item.designType,
+                                    item.filename,
+                                    "tshirt",
+                                    selectedProviderByFile[item.filename] ||
+                                      (providerStatus.printify.configured
+                                        ? "printify"
+                                        : "printful"),
+                                  )
+                                }
+                              >
+                                {uploadingDesign ===
+                                `${item.filename}:${
+                                  selectedProviderByFile[item.filename] ||
+                                  (providerStatus.printify.configured
+                                    ? "printify"
+                                    : "printful")
+                                }:tshirt`
+                                  ? "Uploading Tee..."
+                                  : "Upload T-Shirt"}
+                              </button>
+                              <button
+                                disabled={
+                                  uploadingDesign ===
+                                  `${item.filename}:${
+                                    selectedProviderByFile[item.filename] ||
+                                    (providerStatus.printify.configured
+                                      ? "printify"
+                                      : "printful")
+                                  }:hoodie`
+                                }
+                                onClick={() =>
+                                  handlePrintifyUpload(
+                                    item.designType,
+                                    item.filename,
+                                    "hoodie",
+                                    selectedProviderByFile[item.filename] ||
+                                      (providerStatus.printify.configured
+                                        ? "printify"
+                                        : "printful"),
+                                  )
+                                }
+                              >
+                                {uploadingDesign ===
+                                `${item.filename}:${
+                                  selectedProviderByFile[item.filename] ||
+                                  (providerStatus.printify.configured
+                                    ? "printify"
+                                    : "printful")
+                                }:hoodie`
+                                  ? "Uploading Hoodie..."
+                                  : "Upload Hoodie"}
+                              </button>
+                            </>
                           )}
                         <button
                           onClick={() =>
@@ -885,7 +1001,9 @@ export function App() {
                       }
                     >
                       <option value="low">Low quality (~$0.02/image)</option>
-                      <option value="medium">Medium quality (~$0.06/image)</option>
+                      <option value="medium">
+                        Medium quality (~$0.06/image)
+                      </option>
                       <option value="high">High quality (~$0.26/image)</option>
                     </select>
                   )}
