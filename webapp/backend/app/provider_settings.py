@@ -92,8 +92,11 @@ def load_credentials_to_env() -> dict[str, bool]:
             os.environ[key] = row["value"]
             result[key] = True
         else:
-            os.environ.pop(key, None)
-            result[key] = False
+            existing = os.environ.get(key)
+            if existing and existing.strip():
+                result[key] = True
+            else:
+                result[key] = False
     conn.close()
     _refresh_workspace_module_globals()
     return result
