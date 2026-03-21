@@ -37,16 +37,16 @@ POD business/
 └── README.md           ← you are here
 ```
 
-| Layer | Tech | Purpose |
-|---|---|---|
-| Backend | FastAPI + Python 3.13 | API, job queue, POD uploads, Pinterest scheduler |
-| Frontend | React 18 + Vite | Control center UI |
-| Data | SQLite + openpyxl (xlsx) | Settings, pin queue, design registry, financials |
-| POD — US | Printify | Product creation + Etsy sync for US market |
-| POD — EU | Printful | Product creation + Etsy sync for EU market |
-| Social | Pinterest API | Automated pin scheduling, app promotion |
-| Marketplace | Etsy API (OAuth 2) | Listing management, shop sections, analytics |
-| Design gen | OpenAI / Ideogram / HF / Leonardo | AI-assisted design generation |
+| Layer       | Tech                              | Purpose                                          |
+| ----------- | --------------------------------- | ------------------------------------------------ |
+| Backend     | FastAPI + Python 3.13             | API, job queue, POD uploads, Pinterest scheduler |
+| Frontend    | React 18 + Vite                   | Control center UI                                |
+| Data        | SQLite + openpyxl (xlsx)          | Settings, pin queue, design registry, financials |
+| POD — US    | Printify                          | Product creation + Etsy sync for US market       |
+| POD — EU    | Printful                          | Product creation + Etsy sync for EU market       |
+| Social      | Pinterest API                     | Automated pin scheduling, app promotion          |
+| Marketplace | Etsy API (OAuth 2)                | Listing management, shop sections, analytics     |
+| Design gen  | OpenAI / Ideogram / HF / Leonardo | AI-assisted design generation                    |
 
 ---
 
@@ -68,12 +68,12 @@ POD business/
 
 ## Prerequisites
 
-| Tool | Version | Notes |
-|---|---|---|
-| Python | 3.13 | Required by `servers.ps1`. Other versions work with manual commands. |
-| Node.js | 18+ | For the React frontend |
-| Git | any | — |
-| PowerShell | 5.1+ | Windows only — for `servers.ps1` one-command start |
+| Tool       | Version | Notes                                                                |
+| ---------- | ------- | -------------------------------------------------------------------- |
+| Python     | 3.13    | Required by `servers.ps1`. Other versions work with manual commands. |
+| Node.js    | 18+     | For the React frontend                                               |
+| Git        | any     | —                                                                    |
+| PowerShell | 5.1+    | Windows only — for `servers.ps1` one-command start                   |
 
 > **macOS / Linux:** `servers.ps1` is Windows-specific. Use the manual start commands listed in the [Manual Start](#manual-start) section.
 
@@ -160,16 +160,16 @@ HF_API_TOKEN=
 LEONARDO_API_KEY=
 ```
 
-| Key | Where to get it | Required? |
-|---|---|---|
-| `PRINTIFY_TOKEN` | Printify → My account → Connections | Yes (US uploads) |
-| `PRINTIFY_SHOP_ID` | Printify → Shop URL or API | Yes (US uploads) |
-| `PRINTFUL_API_KEY` | Printful → Developer Portal | Yes (EU uploads) |
-| `PRINTFUL_STORE_ID` | Printful → Dashboard | Yes (EU uploads) |
-| `OPENAI_API_KEY` | platform.openai.com | Optional (generation) |
-| `IDEOGRAM_API_KEY` | ideogram.ai | Optional (generation) |
-| `HF_API_TOKEN` | huggingface.co | Optional (generation) |
-| `LEONARDO_API_KEY` | app.leonardo.ai | Optional (generation) |
+| Key                 | Where to get it                     | Required?             |
+| ------------------- | ----------------------------------- | --------------------- |
+| `PRINTIFY_TOKEN`    | Printify → My account → Connections | Yes (US uploads)      |
+| `PRINTIFY_SHOP_ID`  | Printify → Shop URL or API          | Yes (US uploads)      |
+| `PRINTFUL_API_KEY`  | Printful → Developer Portal         | Yes (EU uploads)      |
+| `PRINTFUL_STORE_ID` | Printful → Dashboard                | Yes (EU uploads)      |
+| `OPENAI_API_KEY`    | platform.openai.com                 | Optional (generation) |
+| `IDEOGRAM_API_KEY`  | ideogram.ai                         | Optional (generation) |
+| `HF_API_TOKEN`      | huggingface.co                      | Optional (generation) |
+| `LEONARDO_API_KEY`  | app.leonardo.ai                     | Optional (generation) |
 
 **Etsy OAuth** is configured separately through the Setup → Etsy tab. You will need a Etsy developer app (API key + shared secret) from the [Etsy Developer portal](https://developer.etsy.com/).
 
@@ -193,12 +193,14 @@ Logs are written to `webapp/.runtime/backend.out.log` and `webapp/.runtime/front
 ### Option B — Manual Start
 
 **Backend:**
+
 ```powershell
 cd "d:\Projects\POD business\webapp\backend"
 .\.venv313\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 **Frontend (separate terminal):**
+
 ```powershell
 cd "d:\Projects\POD business\webapp\frontend"
 npm run dev
@@ -228,6 +230,7 @@ http://<YOUR_LAN_IP>:5173
 ```
 
 Find your LAN IP with:
+
 ```powershell
 .\servers.ps1 status
 ```
@@ -254,20 +257,20 @@ npm run dev
 
 ## Workspace Scripts
 
-| Script | Purpose |
-|---|---|
-| `generate_workspace_v2.py` | Generate or reset all spreadsheet workbooks |
-| `update_workbooks_v2.py` | Update workbooks from a batch log JSON |
-| `workspace/design_pipeline.py` | Core design generation pipeline |
-| `workspace/printify_upload.py` | Upload and publish products to Printify |
-| `workspace/printful_upload.py` | Upload products to Printful |
-| `workspace/printify_mockups.py` | Generate product mockups from Printify |
-| `workspace/pod_pricing.py` | Regional pricing profiles (US / EU) |
-| `workspace/pod_providers.py` | Provider registry |
-| `workspace/trademark_check.py` | IP clearance checks |
-| `workspace/update_workbooks.py` | Earlier version of workbook updater |
-| `workspace/branding/generate_insert.py` | Generate branded insert cards |
-| `workspace/pinterest/export_pins.py` | Export pin batch for Pinterest |
+| Script                                  | Purpose                                     |
+| --------------------------------------- | ------------------------------------------- |
+| `generate_workspace_v2.py`              | Generate or reset all spreadsheet workbooks |
+| `update_workbooks_v2.py`                | Update workbooks from a batch log JSON      |
+| `workspace/design_pipeline.py`          | Core design generation pipeline             |
+| `workspace/printify_upload.py`          | Upload and publish products to Printify     |
+| `workspace/printful_upload.py`          | Upload products to Printful                 |
+| `workspace/printify_mockups.py`         | Generate product mockups from Printify      |
+| `workspace/pod_pricing.py`              | Regional pricing profiles (US / EU)         |
+| `workspace/pod_providers.py`            | Provider registry                           |
+| `workspace/trademark_check.py`          | IP clearance checks                         |
+| `workspace/update_workbooks.py`         | Earlier version of workbook updater         |
+| `workspace/branding/generate_insert.py` | Generate branded insert cards               |
+| `workspace/pinterest/export_pins.py`    | Export pin batch for Pinterest              |
 
 ---
 
@@ -275,17 +278,17 @@ npm run dev
 
 All data lives under `workspace/spreadsheets/`. Generated by `generate_workspace_v2.py`.
 
-| File | Front | Auto-populated | Updated |
-|---|---|---|---|
-| `designs_front_a.xlsx` | A | ✅ | After each sneaker batch |
-| `designs_front_b.xlsx` | B | ✅ | After each general batch |
-| `sales.xlsx` | Both | Manual | After each Etsy payout |
-| `listings.xlsx` | Both | Manual | Weekly from Etsy Stats |
-| `trademark_log.xlsx` | Both | ✅ | After each batch |
-| `drops_front_a.xlsx` | A | Manual | Before each drop launch |
-| `app_analytics.xlsx` | A | Manual | Weekly from app dashboard |
-| `niches_front_b.xlsx` | B | ✅ | After each batch |
-| `financials.xlsx` | Both | Manual | Monthly |
+| File                   | Front | Auto-populated | Updated                   |
+| ---------------------- | ----- | -------------- | ------------------------- |
+| `designs_front_a.xlsx` | A     | ✅             | After each sneaker batch  |
+| `designs_front_b.xlsx` | B     | ✅             | After each general batch  |
+| `sales.xlsx`           | Both  | Manual         | After each Etsy payout    |
+| `listings.xlsx`        | Both  | Manual         | Weekly from Etsy Stats    |
+| `trademark_log.xlsx`   | Both  | ✅             | After each batch          |
+| `drops_front_a.xlsx`   | A     | Manual         | Before each drop launch   |
+| `app_analytics.xlsx`   | A     | Manual         | Weekly from app dashboard |
+| `niches_front_b.xlsx`  | B     | ✅             | After each batch          |
+| `financials.xlsx`      | Both  | Manual         | Monthly                   |
 
 ---
 
@@ -303,15 +306,15 @@ The **pin scheduler** respects Pinterest rate limits and drips pins according to
 
 ## Troubleshooting
 
-| Problem | Fix |
-|---|---|
-| Backend won't start | Make sure `.venv313` exists via setup step. Check `webapp/.runtime/backend.err.log`. |
-| `ModuleNotFoundError` on workspace scripts | Run from the project root, not from `workspace/`. |
-| Frontend shows blank / API errors | Backend must be running on port 8000 first. |
-| Spreadsheets missing | Run `python generate_workspace_v2.py --dir workspace`. |
-| Etsy OAuth redirect fails | Ensure `http://localhost:8000/api/etsy/setup/callback` is registered in your Etsy app's redirect URIs. |
-| Pinterest pins not scheduling | Check `APP_PHASE` setting in the Pinterest → App Mode tab. |
-| Keys not saving | The backend writes to `workspace/pinterest/pinterest.db` — ensure the `workspace/pinterest/` directory exists (created automatically on first run). |
+| Problem                                    | Fix                                                                                                                                                 |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Backend won't start                        | Make sure `.venv313` exists via setup step. Check `webapp/.runtime/backend.err.log`.                                                                |
+| `ModuleNotFoundError` on workspace scripts | Run from the project root, not from `workspace/`.                                                                                                   |
+| Frontend shows blank / API errors          | Backend must be running on port 8000 first.                                                                                                         |
+| Spreadsheets missing                       | Run `python generate_workspace_v2.py --dir workspace`.                                                                                              |
+| Etsy OAuth redirect fails                  | Ensure `http://localhost:8000/api/etsy/setup/callback` is registered in your Etsy app's redirect URIs.                                              |
+| Pinterest pins not scheduling              | Check `APP_PHASE` setting in the Pinterest → App Mode tab.                                                                                          |
+| Keys not saving                            | The backend writes to `workspace/pinterest/pinterest.db` — ensure the `workspace/pinterest/` directory exists (created automatically on first run). |
 
 ---
 

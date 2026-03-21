@@ -102,16 +102,16 @@ Then on the other device: `http://<LAN_IP>:5173`
 
 Open the app → **Setup** tab. Keys are stored in `workspace/pinterest/pinterest.db` and reloaded automatically on every backend restart.
 
-| Key | Provider | Tab |
-|---|---|---|
-| `PRINTIFY_TOKEN` | Printify | Setup → POD Keys |
-| `PRINTIFY_SHOP_ID` | Printify | Setup → POD Keys |
-| `PRINTFUL_API_KEY` | Printful | Setup → POD Keys |
-| `PRINTFUL_STORE_ID` | Printful | Setup → POD Keys |
-| `OPENAI_API_KEY` | OpenAI | Setup → Generation Keys |
-| `IDEOGRAM_API_KEY` | Ideogram | Setup → Generation Keys |
-| `HF_API_TOKEN` | Hugging Face | Setup → Generation Keys |
-| `LEONARDO_API_KEY` | Leonardo.ai | Setup → Generation Keys |
+| Key                 | Provider     | Tab                     |
+| ------------------- | ------------ | ----------------------- |
+| `PRINTIFY_TOKEN`    | Printify     | Setup → POD Keys        |
+| `PRINTIFY_SHOP_ID`  | Printify     | Setup → POD Keys        |
+| `PRINTFUL_API_KEY`  | Printful     | Setup → POD Keys        |
+| `PRINTFUL_STORE_ID` | Printful     | Setup → POD Keys        |
+| `OPENAI_API_KEY`    | OpenAI       | Setup → Generation Keys |
+| `IDEOGRAM_API_KEY`  | Ideogram     | Setup → Generation Keys |
+| `HF_API_TOKEN`      | Hugging Face | Setup → Generation Keys |
+| `LEONARDO_API_KEY`  | Leonardo.ai  | Setup → Generation Keys |
 
 Alternatively, copy `.env.example` to `.env` before starting the backend:
 
@@ -128,24 +128,24 @@ copy backend\.env.example backend\.env
 
 ## Features
 
-| Feature | Route prefix |
-|---|---|
-| Dashboard (design counts) | `GET /api/designs/stats` |
-| Design browser + approve/reject | `GET/POST /api/designs` |
-| Generation jobs (single/batch) | `POST /api/jobs` |
-| Job history | `GET /api/jobs` |
-| POD upload (Printify or Printful) | `POST /api/pod/upload` |
-| Provider status | `GET /api/pod/provider-status` |
-| Pricing profiles | `GET /api/pod/pricing` |
-| Expense tracker (financials.xlsx) | `GET/POST/PUT/DELETE /api/expenses` |
-| Pinterest pin queue | `/api/pinterest/pins` |
-| Pinterest scheduler | `/api/pinterest/schedule` |
-| Pinterest pin factory | `/api/pinterest/pin-factory` |
-| Pinterest app phase | `/api/pinterest/app-phase` |
-| Pinterest analytics | `/api/pinterest/analytics` |
-| Etsy setup / OAuth | `/api/etsy/setup/*` |
-| Etsy listings | `/api/etsy/listings/*` |
-| API key management | `GET/POST/DELETE /api/settings/keys` |
+| Feature                           | Route prefix                         |
+| --------------------------------- | ------------------------------------ |
+| Dashboard (design counts)         | `GET /api/designs/stats`             |
+| Design browser + approve/reject   | `GET/POST /api/designs`              |
+| Generation jobs (single/batch)    | `POST /api/jobs`                     |
+| Job history                       | `GET /api/jobs`                      |
+| POD upload (Printify or Printful) | `POST /api/pod/upload`               |
+| Provider status                   | `GET /api/pod/provider-status`       |
+| Pricing profiles                  | `GET /api/pod/pricing`               |
+| Expense tracker (financials.xlsx) | `GET/POST/PUT/DELETE /api/expenses`  |
+| Pinterest pin queue               | `/api/pinterest/pins`                |
+| Pinterest scheduler               | `/api/pinterest/schedule`            |
+| Pinterest pin factory             | `/api/pinterest/pin-factory`         |
+| Pinterest app phase               | `/api/pinterest/app-phase`           |
+| Pinterest analytics               | `/api/pinterest/analytics`           |
+| Etsy setup / OAuth                | `/api/etsy/setup/*`                  |
+| Etsy listings                     | `/api/etsy/listings/*`               |
+| API key management                | `GET/POST/DELETE /api/settings/keys` |
 
 ---
 
@@ -171,13 +171,13 @@ When approving or rejecting a design in the UI, the backend:
 
 ## Troubleshooting
 
-| Problem | Fix |
-|---|---|
-| Backend won't start | Confirm `.venv313` exists. Check `webapp/.runtime/backend.err.log`. |
-| Frontend blank / API errors | Backend must be running on port 8000 before starting the frontend. |
-| Spreadsheets missing | Run `python generate_workspace_v2.py --dir workspace` from the project root. |
-| Keys not saving | `workspace/pinterest/` is created automatically on first run. Check write permissions. |
-| Etsy OAuth callback fails | Register `http://localhost:8000/api/etsy/setup/callback` in your Etsy developer app. |
-| Pinterest pins not scheduling | Check the App Mode setting in Pinterest → App Mode tab. |
+| Problem                       | Fix                                                                                    |
+| ----------------------------- | -------------------------------------------------------------------------------------- |
+| Backend won't start           | Confirm `.venv313` exists. Check `webapp/.runtime/backend.err.log`.                    |
+| Frontend blank / API errors   | Backend must be running on port 8000 before starting the frontend.                     |
+| Spreadsheets missing          | Run `python generate_workspace_v2.py --dir workspace` from the project root.           |
+| Keys not saving               | `workspace/pinterest/` is created automatically on first run. Check write permissions. |
+| Etsy OAuth callback fails     | Register `http://localhost:8000/api/etsy/setup/callback` in your Etsy developer app.   |
+| Pinterest pins not scheduling | Check the App Mode setting in Pinterest → App Mode tab.                                |
 
 For complete setup instructions see the [root README](../README.md).
