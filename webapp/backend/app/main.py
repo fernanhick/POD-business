@@ -474,6 +474,8 @@ def _read_design_rows(design_type: str) -> list[dict[str, Any]]:
             "etsyListingId": ws.cell(row=row, column=headers["Etsy Listing ID"]).value if "Etsy Listing ID" in headers else None,
             "podProvider": ws.cell(row=row, column=headers["POD Provider"]).value if "POD Provider" in headers else None,
             "podMarket": ws.cell(row=row, column=headers["POD Market"]).value if "POD Market" in headers else None,
+            "colorway": ws.cell(row=row, column=headers["Colorway"]).value if "Colorway" in headers else None,
+            "generationModel": ws.cell(row=row, column=headers["Generation Model"]).value if "Generation Model" in headers else None,
         }
         row_data["printifyUrl"] = _printify_product_url(str(row_data["printifyProductId"]) if row_data["printifyProductId"] else None)
         row_data["etsyUrl"] = _etsy_listing_url(str(row_data["etsyListingId"]) if row_data["etsyListingId"] else None)

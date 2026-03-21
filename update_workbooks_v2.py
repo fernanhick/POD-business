@@ -36,6 +36,23 @@ def next_id(ws, prefix, col=1, start_row=3):
     return f"{prefix}{str(last + 1).zfill(4)}"
 
 
+def header_map(ws):
+    return {
+        (cell.value or "").strip(): idx
+        for idx, cell in enumerate(ws[2], start=1)
+        if isinstance(cell.value, str)
+    }
+
+
+def ensure_header_column(ws, name):
+    headers = header_map(ws)
+    if name in headers:
+        return headers[name]
+    col = ws.max_column + 1
+    ws.cell(row=2, column=col, value=name)
+    return col
+
+
 def append_design_a(ws, record):
     dsn_id = next_id(ws, "DSN-A-")
     ws.append([
@@ -51,6 +68,13 @@ def append_design_a(ws, record):
         record.get("printify_image_id",""), record.get("printify_product_id",""),
         record.get("etsy_listing_id",""), record.get("status","Pending Upload"),
     ])
+
+    row_idx = ws.max_row
+    colorway_col = ensure_header_column(ws, "Colorway")
+    model_col = ensure_header_column(ws, "Generation Model")
+    ws.cell(row=row_idx, column=colorway_col, value=record.get("color_palette", ""))
+    ws.cell(row=row_idx, column=model_col, value=record.get("generation_model", ""))
+
     return dsn_id
 
 
@@ -69,6 +93,13 @@ def append_design_b(ws, record):
         record.get("etsy_listing_id",""),
         record.get("status","Pending Upload"), record.get("notes",""),
     ])
+
+    row_idx = ws.max_row
+    colorway_col = ensure_header_column(ws, "Colorway")
+    model_col = ensure_header_column(ws, "Generation Model")
+    ws.cell(row=row_idx, column=colorway_col, value=record.get("color_palette", ""))
+    ws.cell(row=row_idx, column=model_col, value=record.get("generation_model", ""))
+
     return dsn_id
 
 

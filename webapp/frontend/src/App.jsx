@@ -686,7 +686,8 @@ export function App() {
                     <th>Created</th>
                     <th>Type</th>
                     <th>Name/Phrase</th>
-                    <th>IP Risk</th>
+                    <th>Colorway</th>
+                    <th>Model</th>
                     <th>Location</th>
                     <th>Status</th>
                     <th>Printify</th>
@@ -733,7 +734,8 @@ export function App() {
                       <td className="date-cell">{item.createdAt || "-"}</td>
                       <td>{item.designType}</td>
                       <td>{item.name || item.phrase || "-"}</td>
-                      <td>{item.ipRisk || "-"}</td>
+                      <td>{item.colorway || "-"}</td>
+                      <td>{item.generationModel || "-"}</td>
                       <td>
                         <span className={`badge ${statusClass(item.location)}`}>
                           {item.location}

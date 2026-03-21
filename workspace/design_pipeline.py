@@ -235,7 +235,7 @@ DESIGN_THEMES = {
 PALETTE_OPTIONS = [
     # Original 4
     "black and cream, vintage wash",
-    "off-white and charcoal, distressed texture",
+    "off-white and charcoal, clean matte finish",
     "forest green and ecru, military aesthetic",
     "washed black and bone white, faded streetwear",
     # Streetwear extended
@@ -263,12 +263,14 @@ VISUAL_STYLES = [
     # ── Text-only styles ──────────────────────────────────────────
     {
         "id": "bold_distressed",
-        "label": "Bold distressed typography",
+        "label": "Bold clean typography",
         "prompt": (
             'Minimalist streetwear typography design for t-shirt print, '
-            'bold condensed font, distressed ink texture, '
+            'bold condensed font, clean solid ink fills, '
             'text: "{slogan}", {palette} color palette, '
             'centered layout, vintage streetwear aesthetic, '
+            'design fills most of the canvas with tight margins, no large empty areas, '
+            'smooth color fields, no grain, no speckle, no noise, no distressed texture, '
             'isolated on solid bright magenta (#FF00FF) background, high contrast, clean edges'
         ),
     },
@@ -279,7 +281,9 @@ VISUAL_STYLES = [
             'Bold stacked block letter typography design, '
             'heavy weight condensed sans-serif, '
             'text: "{slogan}", {palette} color palette, '
-            'stamp print texture, urban street poster aesthetic, '
+            'solid matte fills, urban street poster aesthetic, '
+            'design fills most of the canvas with tight margins, no large empty areas, '
+            'smooth color fields, no grain, no speckle, no noise, '
             'isolated on solid bright magenta (#FF00FF) background, t-shirt print ready'
         ),
     },
@@ -288,9 +292,11 @@ VISUAL_STYLES = [
         "label": "Vintage badge/stamp",
         "prompt": (
             'Vintage circular badge stamp design, '
-            'worn distressed border ring with text: "{slogan}", '
+            'clean bold border ring with text: "{slogan}", '
             '{palette} color palette, retro streetwear patch aesthetic, '
-            'centered composition, isolated on solid bright magenta (#FF00FF) background, '
+            'centered composition, fills most of the canvas with tight margins, '
+            'smooth color fields, no grain, no speckle, no noise, '
+            'isolated on solid bright magenta (#FF00FF) background, '
             't-shirt print ready, high contrast'
         ),
     },
@@ -301,8 +307,10 @@ VISUAL_STYLES = [
         "prompt": (
             'Streetwear graphic design combining abstract sneaker sole '
             'tread pattern with bold text: "{slogan}", '
-            '{palette} color palette, distressed print texture, '
+            '{palette} color palette, clean vector-like fills, '
             'urban street culture aesthetic, no brand logos, '
+            'fills most of the canvas with tight margins, no large empty areas, '
+            'smooth color fields, no grain, no speckle, no noise, '
             'isolated on solid bright magenta (#FF00FF) background, t-shirt print ready'
         ),
     },
@@ -312,8 +320,10 @@ VISUAL_STYLES = [
         "prompt": (
             'Minimalist urban city skyline silhouette with bold '
             'streetwear text: "{slogan}", {palette} color palette, '
-            'distressed texture overlay, street culture aesthetic, '
+            'clean matte finish, street culture aesthetic, '
             'centered composition, isolated on solid bright magenta (#FF00FF) background, '
+            'fills most of the canvas with tight margins, no large empty areas, '
+            'smooth color fields, no grain, no speckle, no noise, '
             'no brand logos, t-shirt print ready'
         ),
     },
@@ -324,7 +334,9 @@ VISUAL_STYLES = [
             'Abstract minimalist sneaker outline illustration with '
             'bold condensed text: "{slogan}", {palette} color palette, '
             'line art style, streetwear graphic tee design, '
-            'no specific brand shoe, no logos, distressed vintage texture, '
+            'no specific brand shoe, no logos, clean matte finish, '
+            'fills most of the canvas with tight margins, no large empty areas, '
+            'smooth color fields, no grain, no speckle, no noise, '
             'isolated on solid bright magenta (#FF00FF) background, t-shirt print ready'
         ),
     },
@@ -335,7 +347,9 @@ VISUAL_STYLES = [
             'Minimalist line art illustration of a sneaker collection shelf '
             'with bold streetwear text: "{slogan}", {palette} color palette, '
             'collector culture aesthetic, no brand logos, no specific shoes, '
-            'distressed texture, isolated on solid bright magenta (#FF00FF) background, '
+            'clean matte finish, fills most of the canvas with tight margins, '
+            'smooth color fields, no grain, no speckle, no noise, '
+            'isolated on solid bright magenta (#FF00FF) background, '
             't-shirt print ready'
         ),
     },
@@ -621,9 +635,11 @@ def render_ideogram(record, output_dir):
     ideogram_prompt = (
         f"Minimalist streetwear typography design for t-shirt print, "
         f'{style}, text: "{slogan}", '
-        f"{palette} color palette, distressed texture, centered layout, "
+        f"{palette} color palette, clean matte finish, centered layout, "
         f"vintage streetwear aesthetic, isolated on solid bright magenta (#FF00FF) background, "
-        f"high contrast, clean edges, t-shirt print ready"
+        f"high contrast, clean edges, t-shirt print ready, "
+        f"design fills most of the canvas with tight margins, no large empty areas, "
+        f"smooth color fields, no grain, no speckle, no noise"
     )
 
     hint = record.get("_prompt_hint", "")
@@ -845,12 +861,15 @@ def render_openai(record, output_dir, hd=False):
     prompt = (
         f'Flat 2D streetwear typography design, {style}, '
         f'large bold text reading exactly "{slogan}", '
-        f'{palette} color palette, distressed vintage texture, '
+        f'{palette} color palette, clean matte finish, '
         f'centered balanced composition, portrait orientation. '
+        f'Design fills most of the canvas with tight margins (about 85-92% coverage). '
+        f'Avoid large empty/blank background areas. '
         f'The design is MINIMAL — only the words "{slogan}" appear as text. '
         f'Do NOT add any other text, numbers, dates, labels, captions, slogans, '
         f'taglines, signatures, or decorative words anywhere in the image. '
         f'Keep it simple and clean — one phrase, bold and prominent. '
+        f'Use smooth solid colors and crisp edges. No grain, no speckle, no noise, no distressed texture. '
         f'No t-shirt, no mockup, no garment, no person — just the standalone artwork. '
         f'No brand logos. No photorealistic elements. '
         f'Background is solid bright magenta (#FF00FF), '
@@ -884,7 +903,10 @@ def render_openai_graphic(record, output_dir, hd=False):
         f'Flat 2D streetwear illustration, emblem or badge design, '
         f'{palette} color palette, urban vintage aesthetic, '
         f'centered balanced composition, portrait orientation, '
+        f'fills most of the canvas with tight margins (about 85-92% coverage), '
+        f'avoid large empty/blank background areas, '
         f'suitable for screen printing. '
+        f'Use smooth solid colors and crisp edges. No grain, no speckle, no noise, no distressed texture. '
         f'IMPORTANT: This is a purely visual design with ZERO text. '
         f'No words, no letters, no numbers, no dates, no labels, no captions anywhere. '
         f'No t-shirt, no mockup, no garment, no person — just the standalone artwork. '
@@ -914,23 +936,51 @@ def _gpt_image_generate(prompt, record, output_dir, quality="medium"):
         print("  [SKIP] OPENAI_API_KEY not set")
         return None
     try:
+        headers = {
+            "Authorization": f"Bearer {OPENAI_API_KEY}",
+            "Content-Type": "application/json",
+        }
+
+        payload = {
+            "model": "gpt-image-1",
+            "prompt": prompt,
+            "n": 1,
+            "size": "1024x1536",
+            "quality": quality,
+            "background": "transparent",
+            "output_format": "png",
+        }
         response = requests.post(
             "https://api.openai.com/v1/images/generations",
-            headers={
-                "Authorization": f"Bearer {OPENAI_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
+            headers=headers,
+            json=payload,
+            timeout=180,
+        )
+
+        if response.status_code == 400:
+            detail = ""
+            try:
+                detail = response.json().get("error", {}).get("message", "")
+            except Exception:
+                detail = (response.text or "").strip()
+            if detail:
+                print(f"  [WARN] GPT Image 1 strict payload rejected for {record['filename']}: {detail}")
+
+            # Retry with a more broadly supported payload.
+            fallback_payload = {
                 "model": "gpt-image-1",
                 "prompt": prompt,
                 "n": 1,
-                "size": "1024x1536",
+                "size": "1024x1024",
                 "quality": quality,
-                "background": "transparent",
-                "output_format": "png",
-            },
-            timeout=180,
-        )
+            }
+            response = requests.post(
+                "https://api.openai.com/v1/images/generations",
+                headers=headers,
+                json=fallback_payload,
+                timeout=180,
+            )
+
         response.raise_for_status()
         b64_data = response.json()["data"][0]["b64_json"]
         filepath = os.path.join(output_dir, record["filename"])
@@ -938,7 +988,17 @@ def _gpt_image_generate(prompt, record, output_dir, quality="medium"):
             f.write(base64.b64decode(b64_data))
         return filepath
     except Exception as e:
-        print(f"  [ERR] GPT Image 1 render failed for {record['filename']}: {e}")
+        detail = ""
+        try:
+            if "response" in locals() and response is not None:
+                if response.text:
+                    detail = response.text.strip()
+        except Exception:
+            detail = ""
+        if detail:
+            print(f"  [ERR] GPT Image 1 render failed for {record['filename']}: {e} | API: {detail}")
+        else:
+            print(f"  [ERR] GPT Image 1 render failed for {record['filename']}: {e}")
         return None
 
 
@@ -955,12 +1015,15 @@ def render_gpt_image(record, output_dir, quality="medium"):
     prompt = (
         f'Flat 2D streetwear typography design, {style}, '
         f'large bold text reading exactly "{slogan}", '
-        f'{palette} color palette, distressed vintage texture, '
+        f'{palette} color palette, clean matte finish, '
         f'centered balanced composition, portrait orientation. '
+        f'Design fills most of the canvas with tight margins (about 85-92% coverage). '
+        f'Avoid large empty/blank background areas. '
         f'The design is MINIMAL — only the words "{slogan}" appear as text. '
         f'Do NOT add any other text, numbers, dates, labels, captions, slogans, '
         f'taglines, signatures, or decorative words anywhere in the image. '
         f'Keep it simple and clean — one phrase, bold and prominent. '
+        f'Use smooth solid colors and crisp edges. No grain, no speckle, no noise, no distressed texture. '
         f'No t-shirt, no mockup, no garment, no person — just the standalone artwork. '
         f'No brand logos. No photorealistic elements.'
     )
@@ -992,7 +1055,10 @@ def render_gpt_image_graphic(record, output_dir, quality="medium"):
         f'Flat 2D streetwear illustration, emblem or badge design, '
         f'{palette} color palette, urban vintage aesthetic, '
         f'centered balanced composition, portrait orientation, '
+        f'fills most of the canvas with tight margins (about 85-92% coverage), '
+        f'avoid large empty/blank background areas, '
         f'suitable for screen printing. '
+        f'Use smooth solid colors and crisp edges. No grain, no speckle, no noise, no distressed texture. '
         f'IMPORTANT: This is a purely visual design with ZERO text. '
         f'No words, no letters, no numbers, no dates, no labels, no captions anywhere. '
         f'No t-shirt, no mockup, no garment, no person — just the standalone artwork. '
@@ -1295,8 +1361,9 @@ def stage_generate_prompts_a(drop_id, themes=None, palette_index=0,
     records = []
     for theme, names in use_themes.items():
         for name in names:
-            records.append(build_sneaker_prompt(
-                name, theme, palette, drop_id, output_dir))
+            record = build_sneaker_prompt(name, theme, palette, drop_id, output_dir)
+            record["palette_index"] = palette_index % len(PALETTE_OPTIONS)
+            records.append(record)
     print(f"  [STAGE 1] Generated {len(records)} Front A prompt records")
     return records
 
@@ -1449,7 +1516,7 @@ def stage_output(records, output_path):
             continue
         clean = {k: v for k, v in record.items()
                  if not k.startswith("_") and k not in
-                 ("image_prompt", "negative_prompt", "color_palette")}
+                 ("image_prompt", "negative_prompt")}
         clean_records.append(clean)
     if skipped:
         print(f"  [OUTPUT] Skipped {skipped} records with no rendered image")
@@ -1569,6 +1636,10 @@ def cmd_batch(args):
     records = stage_approve(records)
 
     # Stage 6: Output
+    generation_model = args.render or ""
+    for record in records:
+        record["generation_model"] = generation_model
+
     output_path = os.path.join(WORKSPACE, "logs", log_name)
     stage_output(records, output_path)
 
@@ -1616,6 +1687,8 @@ def cmd_process(args):
                 "etsy_check": "",
                 "substring_match": "None",
                 "tm_notes": "",
+                "color_palette": "",
+                "generation_model": "imported_existing",
             }
         else:
             record = {
@@ -1636,6 +1709,8 @@ def cmd_process(args):
                 "etsy_check": "",
                 "substring_match": "None",
                 "tm_notes": "",
+                "color_palette": "",
+                "generation_model": "imported_existing",
             }
 
         # Fill resolution from actual file
@@ -1765,6 +1840,9 @@ def cmd_variant(args):
     records = stage_approve(records)
 
     output_path = os.path.join(WORKSPACE, "logs", log_name)
+    generation_model = args.render or ""
+    for record in records:
+        record["generation_model"] = generation_model
     stage_output(records, output_path)
 
 
