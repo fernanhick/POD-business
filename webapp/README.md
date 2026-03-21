@@ -65,6 +65,17 @@ npm install
 
 Open http://127.0.0.1:5173
 
+## First-run key setup (persistent)
+
+After opening the app, go to the `Setup` tab and save your credentials:
+
+- Printify: `PRINTIFY_TOKEN`, `PRINTIFY_SHOP_ID`
+- Printful: `PRINTFUL_API_KEY`, `PRINTFUL_STORE_ID` (optional `PRINTFUL_API_BASE`)
+- Generation APIs: `OPENAI_API_KEY`, `IDEOGRAM_API_KEY`, `HF_API_TOKEN`, `LEONARDO_API_KEY`
+
+Keys are persisted locally by the backend and reloaded automatically on restart.
+Use `backend/.env.example` as a reference template when setting up a fresh machine.
+
 ## Current Features
 
 - Dashboard summary for generated/approved/rejected designs

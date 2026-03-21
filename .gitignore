@@ -3,6 +3,11 @@
 .env.*
 !.env.example
 
+# Documentation (keep README files only)
+*.md
+!README.md
+!**/README.md
+
 # Python
 __pycache__/
 *.pyc
@@ -21,3 +26,21 @@ dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# Local tooling
+.claude/
+
+# Generated workspace outputs (design pipeline)
+workspace/front_a_sneaker/approved/
+workspace/front_a_sneaker/designs/
+workspace/front_a_sneaker/drops/
+workspace/front_a_sneaker/rejected/
+workspace/front_b_general/approved/
+workspace/front_b_general/designs/
+workspace/front_b_general/rejected/
+workspace/mockup_output/
+workspace/logs/
+workspace/pinterest/export/
+workspace/pinterest/pins/
+workspace/pinterest/pinterest.db
+workspace/spreadsheets/*.xlsx

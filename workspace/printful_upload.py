@@ -37,9 +37,43 @@ PRINTFUL_API_BASE = os.environ.get("PRINTFUL_API_BASE", "https://api.printful.co
 
 
 def _headers() -> dict[str, str]:
-    return {
+    headers = {
         "Authorization": f"Bearer {PRINTFUL_API_KEY}",
     }
+    if PRINTFUL_STORE_ID:
+        headers["X-PF-Store-Id"] = str(PRINTFUL_STORE_ID)
+    return headers
+
+
+def _wait_for_file_ready(file_id: str, timeout_seconds: int = 45) -> dict[str, Any]:
+    import time
+
+    deadline = time.time() + timeout_seconds
+    last_payload: dict[str, Any] = {}
+    while time.time() < deadline:
+        response = requests.get(
+            f"{PRINTFUL_API_BASE}/files/{int(file_id)}",
+            headers=_headers(),
+            timeout=20,
+        )
+        if not response.ok:
+            time.sleep(1)
+            continue
+        payload = _extract_result(response.json())
+        if not isinstance(payload, dict):
+            time.sleep(1)
+            continue
+        last_payload = payload
+        status = str(payload.get("status") or "").lower()
+        if status == "ok":
+            return payload
+        if status == "failed":
+            raise RuntimeError(f"Printful file processing failed for id={file_id}: {payload}")
+        time.sleep(1)
+
+    raise RuntimeError(
+        f"Printful file {file_id} was not ready before timeout; last status={last_payload.get('status')}"
+    )
 
 
 def _parse_variant_ids(value: str | None) -> list[int]:
@@ -133,32 +167,42 @@ def upload_image(filepath: str) -> str:
     if not PRINTFUL_STORE_ID:
         raise RuntimeError("PRINTFUL_STORE_ID not configured")
 
+    file_name = os.path.basename(filepath)
     with open(filepath, "rb") as image_file:
         encoded = base64.b64encode(image_file.read()).decode("ascii")
 
     response = requests.post(
         f"{PRINTFUL_API_BASE}/files",
-        headers=_headers(),
+        headers={**_headers(), "Content-Type": "application/json"},
         json={
-            "store_id": int(PRINTFUL_STORE_ID),
+            "type": "default",
+            "filename": file_name,
+            "visible": True,
             "data": encoded,
         },
         timeout=60,
     )
 
-    response.raise_for_status()
+    if not response.ok:
+        raise RuntimeError(
+            f"Printful file upload failed [{response.status_code}]: {response.text[:400]}"
+        )
     payload = _extract_result(response.json())
     file_id = payload.get("id")
     if not file_id:
         raise RuntimeError(f"Unexpected Printful file upload response: {payload}")
+    file_info = _wait_for_file_ready(str(file_id))
+    print(
+        f"[printful] file uploaded: id={file_id} name={file_name} status={file_info.get('status')}"
+    )
     return str(file_id)
 
 
 def create_product(image_id: str, title: str, description: str, cfg: dict, design_name: str | None = None) -> str:
     if not PRINTFUL_API_KEY:
         raise RuntimeError("PRINTFUL_API_KEY not configured")
-        if not PRINTFUL_STORE_ID:
-            raise RuntimeError("PRINTFUL_STORE_ID not configured")
+    if not PRINTFUL_STORE_ID:
+        raise RuntimeError("PRINTFUL_STORE_ID not configured")
 
     variant_ids: list[int] = list(cfg.get("variant_ids") or [])
     if not variant_ids:
@@ -166,6 +210,16 @@ def create_product(image_id: str, title: str, description: str, cfg: dict, desig
         raise RuntimeError(
             f"No Printful variant IDs configured for {product_type}. Set PRINTFUL_{product_type.upper()}_VARIANT_IDS."
         )
+
+    file_info = _wait_for_file_ready(str(image_id))
+    thumbnail_url = (
+        file_info.get("preview_url")
+        or file_info.get("thumbnail_url")
+        or file_info.get("url")
+    )
+    print(
+        f"[printful] file ready for product: id={image_id} status={file_info.get('status')} thumbnail={bool(thumbnail_url)}"
+    )
 
     profile = get_profile_for_provider_market("printful", "EU")
     sizes = _size_cycle(cfg.get("product_type", "tshirt"))
@@ -186,7 +240,7 @@ def create_product(image_id: str, title: str, description: str, cfg: dict, desig
             {
                 "variant_id": int(variant_id),
                 "retail_price": retail_price,
-                "files": [{"id": int(image_id)}],
+                "files": [{"id": int(image_id), "type": "default"}],
             }
         )
 
@@ -194,7 +248,7 @@ def create_product(image_id: str, title: str, description: str, cfg: dict, desig
             "store_id": int(PRINTFUL_STORE_ID),
         "sync_product": {
             "name": title,
-            "thumbnail": None,
+            "thumbnail": thumbnail_url,
             "is_ignored": False,
         },
         "sync_variants": sync_variants,
@@ -209,28 +263,30 @@ def create_product(image_id: str, title: str, description: str, cfg: dict, desig
             "store_id": int(PRINTFUL_STORE_ID),
         "sync_product": {
             "name": title,
-            "thumbnail": None,
+            "thumbnail": thumbnail_url,
             "is_ignored": False,
         },
         "sync_variants": fallback_variants,
     }
 
     errors: list[str] = []
-    for payload in (primary_payload, fallback_payload):
+    for attempt, payload in enumerate((primary_payload, fallback_payload), start=1):
         response = requests.post(
             f"{PRINTFUL_API_BASE}/store/products",
             headers={**_headers(), "Content-Type": "application/json"},
             json=payload,
             timeout=60,
         )
+        print(f"[printful] create_product attempt {attempt}: status={response.status_code}")
         if response.ok:
             result = _extract_result(response.json())
             sync_product = result.get("sync_product", {}) if isinstance(result, dict) else {}
             product_id = sync_product.get("id") or result.get("id")
             if not product_id:
                 raise RuntimeError(f"Unexpected Printful product response: {result}")
+            print(f"[printful] product created: id={product_id} (attempt {attempt})")
             return str(product_id)
-        errors.append(response.text)
+        errors.append(f"[attempt {attempt}] {response.status_code}: {response.text[:300]}")
 
     raise RuntimeError("Printful product creation failed: " + " | ".join(errors))
 

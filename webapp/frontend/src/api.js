@@ -73,6 +73,22 @@ export const api = {
   },
   printifyStatus: () => request("/printify/status"),
   podProviderStatus: () => request("/pod/provider-status"),
+  setupKeysStatus: () => request("/setup/keys/status"),
+  saveSetupPrintifyKeys: (payload) =>
+    request("/setup/keys/printify", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  saveSetupPrintfulKeys: (payload) =>
+    request("/setup/keys/printful", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  saveSetupGenerationKeys: (payload) =>
+    request("/setup/keys/generation", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   printifyUpload: (payload) =>
     request("/printify/upload", {
       method: "POST",

@@ -19,7 +19,8 @@ from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from openpyxl import load_workbook
 
@@ -172,6 +173,24 @@ class PrintifyUploadRequest(BaseModel):
     market: Literal["US", "EU"] | None = None  # Market region (defaults by provider)
     draft: bool = False
     country: str | None = None  # Optional for EU VAT bucket selection
+
+
+class PrintifyCredentialsRequest(BaseModel):
+    token: str
+    shop_id: str
+
+
+class PrintfulCredentialsRequest(BaseModel):
+    api_key: str
+    store_id: str
+    api_base: str | None = None
+
+
+class GenerationCredentialsRequest(BaseModel):
+    openai_api_key: str | None = None
+    ideogram_api_key: str | None = None
+    hf_api_token: str | None = None
+    leonardo_api_key: str | None = None
 
 
 class ExpenseCreate(BaseModel):
@@ -856,6 +875,9 @@ def _run_generation_job(job_id: str, payload: GenerationRequest) -> None:
 @app.on_event("startup")
 def startup_event() -> None:
     _ensure_db()
+    from .provider_settings import init_db as init_provider_settings_db, load_credentials_to_env as load_provider_creds
+    init_provider_settings_db()
+    load_provider_creds()
     if _PINTEREST_AVAILABLE:
         from .pinterest.models import init_db as init_pinterest_db
         init_pinterest_db()
@@ -1165,6 +1187,48 @@ def printify_status() -> dict[str, Any]:
         "hasToken": has_token,
         "hasShopId": has_shop_id,
     }
+
+
+@app.get("/api/setup/keys/status")
+def setup_keys_status() -> dict[str, Any]:
+    from .provider_settings import get_keys_status
+
+    return get_keys_status()
+
+
+@app.post("/api/setup/keys/printify")
+def save_setup_printify_keys(payload: PrintifyCredentialsRequest) -> dict[str, Any]:
+    from .provider_settings import save_printify_credentials
+
+    try:
+        save_printify_credentials(payload.token, payload.shop_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"saved": True, "group": "printify"}
+
+
+@app.post("/api/setup/keys/printful")
+def save_setup_printful_keys(payload: PrintfulCredentialsRequest) -> dict[str, Any]:
+    from .provider_settings import save_printful_credentials
+
+    try:
+        save_printful_credentials(payload.api_key, payload.store_id, payload.api_base)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"saved": True, "group": "printful"}
+
+
+@app.post("/api/setup/keys/generation")
+def save_setup_generation_keys(payload: GenerationCredentialsRequest) -> dict[str, Any]:
+    from .provider_settings import save_generation_credentials
+
+    save_generation_credentials(
+        openai_api_key=payload.openai_api_key,
+        ideogram_api_key=payload.ideogram_api_key,
+        hf_api_token=payload.hf_api_token,
+        leonardo_api_key=payload.leonardo_api_key,
+    )
+    return {"saved": True, "group": "generation"}
 
 
 def _validate_printful_store_for_api() -> tuple[bool, str | None]:
@@ -1523,3 +1587,15 @@ def printify_upload(payload: PrintifyUploadRequest) -> dict[str, Any]:
         "market": payload.market,
         "etsySyncError": etsy_sync_error,
     }
+
+
+# ── Desktop mode: serve the built React frontend ──────────────────────
+FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+
+if FRONTEND_DIST.is_dir():
+    app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIST / "assets")), name="static-assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        index = FRONTEND_DIST / "index.html"
+        return HTMLResponse(index.read_text())

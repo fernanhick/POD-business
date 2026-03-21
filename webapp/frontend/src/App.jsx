@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
 import PinterestTab from "./pinterest/PinterestTab";
 import EtsySetup from "./etsy/EtsySetup";
+import KeysSetup from "./setup/KeysSetup";
 
 const NAV_ITEMS = [
   "Dashboard",
@@ -9,6 +10,7 @@ const NAV_ITEMS = [
   "Generate",
   "Expenses",
   "Jobs",
+  "Setup",
   "Etsy",
   "Pinterest",
 ];
@@ -156,18 +158,22 @@ export function App() {
     loadAll();
   }, [loadAll]);
 
-  useEffect(() => {
-    api
-      .podProviderStatus()
-      .then((res) => {
-        const providers = res?.providers || {};
-        setProviderStatus({
-          printify: providers.printify || { configured: false, market: "US" },
-          printful: providers.printful || { configured: false, market: "EU" },
-        });
-      })
-      .catch(() => {});
+  const refreshProviderStatus = useCallback(async () => {
+    try {
+      const res = await api.podProviderStatus();
+      const providers = res?.providers || {};
+      setProviderStatus({
+        printify: providers.printify || { configured: false, market: "US" },
+        printful: providers.printful || { configured: false, market: "EU" },
+      });
+    } catch {
+      // ignore status fetch errors
+    }
   }, []);
+
+  useEffect(() => {
+    refreshProviderStatus();
+  }, [refreshProviderStatus]);
 
   const handlePrintifyUpload = async (
     designType,
@@ -1492,6 +1498,7 @@ export function App() {
         )}
 
         {tab === "Etsy" && <EtsySetup />}
+        {tab === "Setup" && <KeysSetup onSaved={refreshProviderStatus} />}
         {tab === "Pinterest" && <PinterestTab />}
 
         {genModal && (

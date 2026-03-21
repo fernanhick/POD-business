@@ -641,3 +641,168 @@
   font-size: 11px;
   color: #888;
 }
+
+/* ── Responsive ─────────────────────────────────────────────────────── */
+
+@media (max-width: 1100px) {
+  .pin-factory {
+    flex-direction: column;
+  }
+
+  .pin-factory__sidebar {
+    width: 100%;
+    min-width: 0;
+    border-right: none;
+    border-bottom: 1px solid #333;
+    padding-right: 0;
+    padding-bottom: 12px;
+    max-height: 200px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .design-picker-item {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 180px;
+  }
+
+  .pin-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  }
+
+  .phase-banner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+}
+
+@media (max-width: 768px) {
+  .pinterest-tab__nav {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    gap: 0;
+  }
+
+  .subtab {
+    padding: 8px 12px;
+    font-size: 12px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .pin-factory__sidebar {
+    max-height: 160px;
+  }
+
+  .design-picker-item {
+    min-width: 150px;
+  }
+
+  .design-picker-item img {
+    width: 36px;
+    height: 36px;
+  }
+
+  .pin-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px;
+  }
+
+  .kpi-bar {
+    gap: 8px;
+  }
+
+  .kpi-card {
+    min-width: 100px;
+    padding: 10px;
+  }
+
+  .kpi-card__value {
+    font-size: 22px;
+  }
+
+  .schedule-pin-row {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .analytics-table,
+  .url-table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .toolbar {
+    gap: 8px;
+  }
+
+  .toolbar button,
+  .toolbar select {
+    font-size: 12px;
+    padding: 6px 10px;
+  }
+
+  .burst-section {
+    padding: 12px;
+  }
+
+  .pinterest-setup {
+    max-width: 100%;
+  }
+
+  .setup-step__header {
+    padding: 10px 12px;
+  }
+
+  .setup-step__body {
+    padding: 12px;
+  }
+}
+
+@media (max-width: 520px) {
+  .pin-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .pin-card__body {
+    padding: 6px;
+  }
+
+  .pin-card__title {
+    font-size: 11px;
+  }
+
+  .kpi-card {
+    min-width: 0;
+    flex: 1 1 calc(50% - 4px);
+  }
+
+  .kpi-card__value {
+    font-size: 18px;
+  }
+
+  .kpi-card__label {
+    font-size: 10px;
+  }
+
+  .schedule-pin-row img {
+    width: 32px;
+    height: 48px;
+  }
+
+  .phase-banner__label {
+    font-size: 15px;
+  }
+
+  .connection-banner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+}
