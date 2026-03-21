@@ -298,20 +298,53 @@ def calc_price(cost_cents, shipping_cents):
     return dollars * 100 - 1      # e.g. $23.99 = 2399
 
 
-def create_product(image_id, title, description, cfg, design_name=None):
-    """Create a product on Printify with the uploaded image. Returns product ID."""
-    # Build tags: base tags + dynamic from design name, capped at 13 (Etsy max)
+def build_product_tags(cfg, design_name=None, product_type=None):
+    """Build tags: base tags + dynamic from design name, capped at 13 (Etsy max)."""
     base_tags = list(cfg.get("tags", []))
     if design_name:
         name_lower = design_name.lower().strip()
         dynamic = [name_lower]
         first_word = name_lower.split()[0] if name_lower.split() else None
         if first_word:
-            dynamic.append(f"{first_word} tee")
+            suffix = "hoodie" if product_type == "hoodie" else "tee"
+            dynamic.append(f"{first_word} {suffix}")
         for tag in dynamic:
             if tag not in base_tags:
                 base_tags.append(tag)
-    tags = [t[:20] for t in base_tags[:13]]  # Etsy max 20 chars per tag
+    return [t[:20] for t in base_tags[:13]]  # Etsy max 20 chars per tag
+
+
+def ensure_product_tags(product_id, title, description, tags, attempts=3, delay=0.8):
+    """Reapply tags if Printify returns an empty tag list after product creation."""
+    normalized = [tag for tag in (tags or []) if tag]
+    if not normalized:
+        return
+
+    for attempt in range(1, attempts + 1):
+        product = get_product(str(product_id))
+        current_tags = [tag for tag in product.get("tags", []) if tag]
+        if current_tags:
+            return
+
+        update_product(str(product_id), title, description, normalized)
+
+        product = get_product(str(product_id))
+        current_tags = [tag for tag in product.get("tags", []) if tag]
+        if current_tags:
+            return
+
+        if attempt < attempts:
+            time.sleep(delay)
+
+    raise RuntimeError(
+        f"Printify product {product_id} still has no tags after {attempts} update attempt(s)"
+    )
+
+
+def create_product(image_id, title, description, cfg, design_name=None):
+    """Create a product on Printify with the uploaded image. Returns product ID."""
+    product_type = "hoodie" if "hoodie" in title.lower() else "tshirt"
+    tags = build_product_tags(cfg, design_name=design_name, product_type=product_type)
 
     # Build variants with calculated per-size pricing
     base_cost = cfg["base_cost_cents"]
@@ -351,7 +384,9 @@ def create_product(image_id, title, description, cfg, design_name=None):
         json=payload,
     )
     resp.raise_for_status()
-    return resp.json()["id"]
+    product_id = resp.json()["id"]
+    ensure_product_tags(product_id, title, description, tags)
+    return product_id
 
 
 def publish_product(product_id):
@@ -600,9 +635,6 @@ def run_update(front, product_type="tshirt", republish=False, dry_run=False):
         print(f"  No products found in spreadsheet for Front {front}")
         return
 
-    # Build tags (same logic as create_product)
-    base_tags = list(pcfg.get("tags", []))
-
     action = "update + republish" if republish else "update on Printify"
     print(f"  Front {front} ({product_type}): {len(rows)} products to {action}\n")
 
@@ -612,19 +644,7 @@ def run_update(front, product_type="tshirt", republish=False, dry_run=False):
         title = pcfg["title_template"].format(name=base_name)
         desc = pcfg["description_template"]
 
-        # Per-product tags: base + dynamic from design name
-        tags = list(base_tags)
-        name_lower = base_name.lower().strip()
-        dynamic = [name_lower]
-        first_word = name_lower.split()[0] if name_lower.split() else None
-        if first_word:
-            dynamic.append(f"{first_word} tee" if product_type == "tshirt"
-                           else f"{first_word} hoodie")
-        for tag in dynamic:
-            tag = tag[:20]  # Etsy max 20 chars per tag
-            if tag not in tags:
-                tags.append(tag)
-        tags = tags[:13]
+        tags = build_product_tags(pcfg, design_name=base_name, product_type=product_type)
 
         if dry_run:
             print(f"  [DRY] {filename} (id={product_id})")
