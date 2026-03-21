@@ -1,53 +1,37 @@
-# POD Local Control Center
+# POD Business — Web App (Control Center)
 
-This app runs locally and wraps your existing automation inside `workspace/`.
+Local web app that wraps the design automation pipeline in `../workspace/`. No cloud required — everything runs on your own machine.
 
 ## Structure
 
-- `backend/` FastAPI API for designs, jobs, approvals, and expenses
-- `frontend/` React + Vite UI
-- Existing scripts/data stay in `../workspace/` (unchanged)
-
-## One-command start/stop
-
-```powershell
-cd "d:\Projects\POD business\webapp"
-.\servers.ps1 start
+```
+webapp/
+├── backend/            ← FastAPI app (Python 3.13)
+│   ├── app/
+│   │   ├── main.py         ← All core routes + job queue
+│   │   ├── provider_settings.py  ← API key storage (SQLite)
+│   │   ├── pinterest/      ← Pinterest scheduler, pin factory, app-phase control
+│   │   └── etsy/           ← Etsy OAuth 2 setup + listing management
+│   ├── requirements.txt
+│   └── .env.example
+├── frontend/           ← React 18 + Vite
+│   └── src/
+│       ├── App.jsx
+│       ├── pinterest/      ← Pinterest UI (setup, pin factory, schedule, analytics)
+│       ├── etsy/           ← Etsy setup UI
+│       └── setup/          ← API key management UI
+├── servers.ps1         ← One-command start/stop/status (Windows)
+├── desktop.pyw         ← Launch as native desktop window (pywebview)
+└── POD Business.bat    ← Double-click launcher
 ```
 
-Useful commands:
+The scripts and data in `../workspace/` are never modified by the web app — it only reads from and writes results back to them.
 
-```powershell
-.\servers.ps1 status
-.\servers.ps1 stop
-```
+---
 
-The script writes logs and PID files under `webapp/.runtime/`.
+## First-time Setup
 
-## Access from another device (same Wi-Fi/LAN)
-
-1. Start servers from this machine:
-
-```powershell
-cd "d:\Projects\POD business\webapp"
-.\servers.ps1 start
-```
-
-2. Find your machine LAN IP (the script also prints it in `status`):
-
-```powershell
-.\servers.ps1 status
-```
-
-3. Open on another device:
-
-```text
-http://<YOUR_LAN_IP>:5173
-```
-
-The frontend proxies `/api` requests to the local backend (`127.0.0.1:8000`), so other devices only need access to port `5173`.
-
-## Backend setup (first run)
+### Backend (Python 3.13)
 
 ```powershell
 cd "d:\Projects\POD business\webapp\backend"
@@ -56,94 +40,144 @@ py -3.13 -m venv .venv313
 .\.venv313\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-## Frontend setup (first run)
+### Frontend (Node.js 18+)
 
 ```powershell
 cd "d:\Projects\POD business\webapp\frontend"
 npm install
 ```
 
-Open http://127.0.0.1:5173
+---
 
-## First-run key setup (persistent)
+## Starting the Servers
 
-After opening the app, go to the `Setup` tab and save your credentials:
+### One command (Windows)
 
-- Printify: `PRINTIFY_TOKEN`, `PRINTIFY_SHOP_ID`
-- Printful: `PRINTFUL_API_KEY`, `PRINTFUL_STORE_ID` (optional `PRINTFUL_API_BASE`)
-- Generation APIs: `OPENAI_API_KEY`, `IDEOGRAM_API_KEY`, `HF_API_TOKEN`, `LEONARDO_API_KEY`
+```powershell
+cd "d:\Projects\POD business\webapp"
+.\servers.ps1 start      # start backend + frontend
+.\servers.ps1 status     # check status and print LAN IP
+.\servers.ps1 stop       # stop both
+```
 
-Keys are persisted locally by the backend and reloaded automatically on restart.
-Use `backend/.env.example` as a reference template when setting up a fresh machine.
+Logs and PID files are written to `webapp/.runtime/`.
 
-## Current Features
+### Manual start
 
-- Dashboard summary for generated/approved/rejected designs
-- Designs and approvals with manual approve/reject actions
-- POD upload provider selection per approved design (`Printify (US)` or `Printful (EU)`)
-- Generation jobs (single/batch, sneaker/general) routed to existing pipeline
-- Job history/state tracking
-- Expenses CRUD against `workspace/spreadsheets/financials.xlsx`
+```powershell
+# Terminal 1 — backend
+cd "d:\Projects\POD business\webapp\backend"
+.\.venv313\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+
+# Terminal 2 — frontend
+cd "d:\Projects\POD business\webapp\frontend"
+npm run dev
+```
+
+Open **http://127.0.0.1:5173**
+
+### Desktop window
+
+```powershell
+python desktop.pyw
+```
+
+Opens the UI in a native window via `pywebview` (no browser tab).
+
+---
+
+## Access from Another Device (same Wi-Fi / LAN)
+
+The frontend proxies all `/api` requests to `127.0.0.1:8000`, so other devices only need port `5173`.
+
+```powershell
+.\servers.ps1 status    # prints your LAN IP
+```
+
+Then on the other device: `http://<LAN_IP>:5173`
+
+---
+
+## API Key Setup (first run)
+
+Open the app → **Setup** tab. Keys are stored in `workspace/pinterest/pinterest.db` and reloaded automatically on every backend restart.
+
+| Key | Provider | Tab |
+|---|---|---|
+| `PRINTIFY_TOKEN` | Printify | Setup → POD Keys |
+| `PRINTIFY_SHOP_ID` | Printify | Setup → POD Keys |
+| `PRINTFUL_API_KEY` | Printful | Setup → POD Keys |
+| `PRINTFUL_STORE_ID` | Printful | Setup → POD Keys |
+| `OPENAI_API_KEY` | OpenAI | Setup → Generation Keys |
+| `IDEOGRAM_API_KEY` | Ideogram | Setup → Generation Keys |
+| `HF_API_TOKEN` | Hugging Face | Setup → Generation Keys |
+| `LEONARDO_API_KEY` | Leonardo.ai | Setup → Generation Keys |
+
+Alternatively, copy `.env.example` to `.env` before starting the backend:
+
+```powershell
+copy backend\.env.example backend\.env
+# then edit backend\.env with your values
+```
+
+**Etsy OAuth:** Setup → Etsy tab. Requires an Etsy developer app (API key + shared secret). The OAuth callback must be registered as `http://localhost:8000/api/etsy/setup/callback` in the Etsy developer portal.
+
+**Pinterest:** Setup → Pinterest tab.
+
+---
+
+## Features
+
+| Feature | Route prefix |
+|---|---|
+| Dashboard (design counts) | `GET /api/designs/stats` |
+| Design browser + approve/reject | `GET/POST /api/designs` |
+| Generation jobs (single/batch) | `POST /api/jobs` |
+| Job history | `GET /api/jobs` |
+| POD upload (Printify or Printful) | `POST /api/pod/upload` |
+| Provider status | `GET /api/pod/provider-status` |
+| Pricing profiles | `GET /api/pod/pricing` |
+| Expense tracker (financials.xlsx) | `GET/POST/PUT/DELETE /api/expenses` |
+| Pinterest pin queue | `/api/pinterest/pins` |
+| Pinterest scheduler | `/api/pinterest/schedule` |
+| Pinterest pin factory | `/api/pinterest/pin-factory` |
+| Pinterest app phase | `/api/pinterest/app-phase` |
+| Pinterest analytics | `/api/pinterest/analytics` |
+| Etsy setup / OAuth | `/api/etsy/setup/*` |
+| Etsy listings | `/api/etsy/listings/*` |
+| API key management | `GET/POST/DELETE /api/settings/keys` |
+
+---
 
 ## POD Providers (US/EU routing)
 
-The upload flow is provider-aware:
+- **Printify** → US market uploads
+- **Printful** → EU market uploads
 
-- `Printify` is routed for `US` market uploads
-- `Printful` is routed for `EU` market uploads
+The frontend reads readiness from `GET /api/pod/provider-status` and sends the provider choice alongside the design payload. Regional pricing is handled by `workspace/pod_pricing.py`.
 
-The frontend reads provider readiness from:
-
-- `GET /api/pod/provider-status`
-
-and sends provider-aware payloads to:
-
-- `POST /api/printify/upload`
-
-with `provider` and `market` in the request body.
-
-### Required environment variables
-
-Backend checks these credentials:
-
-- `PRINTIFY_TOKEN`
-- `PRINTIFY_SHOP_ID`
-- `PRINTFUL_API_KEY`
-- `PRINTFUL_STORE_ID` (must be a Manual Order/API Printful store ID)
-- `PRINTFUL_TSHIRT_VARIANT_IDS` (comma-separated Printful variant IDs)
-- `PRINTFUL_HOODIE_VARIANT_IDS` (comma-separated Printful variant IDs)
-
-Optional per-front overrides:
-
-- `PRINTFUL_A_TSHIRT_VARIANT_IDS`, `PRINTFUL_B_TSHIRT_VARIANT_IDS`
-- `PRINTFUL_A_HOODIE_VARIANT_IDS`, `PRINTFUL_B_HOODIE_VARIANT_IDS`
-
-If a provider is not configured, it appears disabled in the website upload selector.
-
-### Optional Etsy auto-create fallback (for Printful flow)
-
-If Printful publish does not return an Etsy external listing ID, backend can auto-create
-an Etsy draft listing (if Etsy setup is connected) using:
-
-- `ETSY_SHIPPING_PROFILE_ID`
-- `ETSY_RETURN_POLICY_ID`
-- `ETSY_PROCESSING_PROFILE_ID`
-- `ETSY_TAXONOMY_ID`
-
-When missing, upload response includes `etsySyncError` with the exact missing keys.
+---
 
 ## Approval Reconciliation
 
-When approving/rejecting in the app, it will:
+When approving or rejecting a design in the UI, the backend:
 
-1. Move file to `approved/` or `rejected/`
-2. Update `Approved?` + `Status` in the corresponding design spreadsheet
-3. Update decision in `trademark_log.xlsx`
-4. Update matching records in JSON logs under `workspace/logs/`
+1. Moves the file to `approved/` or `rejected/` under the relevant front folder
+2. Updates `Approved?` and `Status` in the corresponding design spreadsheet
+3. Updates the decision in `trademark_log.xlsx`
+4. Updates matching records in JSON logs under `workspace/logs/`
 
-## Recommendations
+---
 
-1. Add a nightly backup job for `workspace/spreadsheets` and `workspace/logs`.
-2. Add role/PIN lock if this runs on shared machines.
-3. Add dry-run toggle for generation/upload actions.
-4. Add a resync endpoint to rebuild app state from workbook + folders.
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| Backend won't start | Confirm `.venv313` exists. Check `webapp/.runtime/backend.err.log`. |
+| Frontend blank / API errors | Backend must be running on port 8000 before starting the frontend. |
+| Spreadsheets missing | Run `python generate_workspace_v2.py --dir workspace` from the project root. |
+| Keys not saving | `workspace/pinterest/` is created automatically on first run. Check write permissions. |
+| Etsy OAuth callback fails | Register `http://localhost:8000/api/etsy/setup/callback` in your Etsy developer app. |
+| Pinterest pins not scheduling | Check the App Mode setting in Pinterest → App Mode tab. |
+
+For complete setup instructions see the [root README](../README.md).
