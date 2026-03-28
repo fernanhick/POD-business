@@ -57,6 +57,16 @@ LEONARDO_API_KEY = os.environ.get("LEONARDO_API_KEY", "")
 HF_API_TOKEN     = os.environ.get("HF_API_TOKEN", "")
 OPENAI_API_KEY   = os.environ.get("OPENAI_API_KEY", "")
 
+# ── Mascot character reference ───────────────────────────────────
+MASCOT_DIR = os.path.join(WORKSPACE, "branding", "mascot")
+MASCOT_SHEET = os.path.join(MASCOT_DIR, "chimp_expression_sheet.png")
+
+MASCOT_EXPRESSIONS = [
+    "random", "stern", "happy", "surprised", "laughing",
+    "annoyed", "thinking", "wink", "nervous",
+    "huh", "sleepy", "shocked", "calm",
+]
+
 # ── Hugging Face Inference Config ─────────────────────────────────
 HF_ROUTER = "https://router.huggingface.co/hf-inference/models"
 HF_MODEL  = "stabilityai/stable-diffusion-xl-base-1.0"
@@ -232,20 +242,20 @@ DESIGN_THEMES = {
     ],
 }
 
-PALETTE_OPTIONS = [
-    # Original 4
+ORIGINAL_PALETTE_OPTIONS = [
     "black and cream, vintage wash",
     "off-white and charcoal, clean matte finish",
     "forest green and ecru, military aesthetic",
     "washed black and bone white, faded streetwear",
-    # Streetwear extended
+]
+
+EXTENDED_PALETTE_OPTIONS = [
     "navy blue and gold, luxury streetwear",
     "burgundy and cream, vintage sport aesthetic",
     "rust orange and sand, earth tone warmth",
     "pure black and white, high contrast monochrome",
     "olive drab and tan, utilitarian workwear",
     "slate grey and neon green, tech streetwear",
-    # Broader / Front B friendly
     "terracotta and ivory, warm bohemian",
     "deep teal and warm cream, coastal vintage",
     "dusty rose and charcoal, soft modern",
@@ -253,6 +263,16 @@ PALETTE_OPTIONS = [
     "lavender and slate, muted pastel",
     "red and black, bold graphic",
 ]
+
+PALETTE_OPTIONS = ORIGINAL_PALETTE_OPTIONS + EXTENDED_PALETTE_OPTIONS
+
+
+def _palette_instruction(palette):
+    return (
+        "strictly use this limited palette only: "
+        f"{palette}; keep the artwork anchored to these tones only; "
+        "do not introduce extra accent colors outside the selected colorway"
+    )
 
 # ── Visual Styles (mixed into batches for variety) ────────────────
 # Each style defines an Ideogram prompt strategy. Some are text-only,
@@ -370,8 +390,19 @@ FRONT_A_NEGATIVE = (
     "nike, adidas, jordan, supreme, off-white, yeezy, brand logo, swoosh, "
     "three stripes, jumpman, realistic sneaker photo, photorealistic, "
     "blurry, watermark, cluttered background, nsfw, misspelling, "
-    "magenta elements in design, pink text, magenta graphics"
+    "magenta elements in design, pink text, magenta graphics, "
+    "text hidden behind graphics, covered letters, unreadable text, cropped words"
 )
+
+PHRASE_VISIBILITY_THRESHOLDS = {
+    "strict": 1.00,
+    "balanced": 0.90,
+    "flexible": 0.80,
+}
+
+
+def _phrase_visibility_threshold(mode):
+    return PHRASE_VISIBILITY_THRESHOLDS.get((mode or "balanced").lower(), 0.90)
 
 # ── Filename collision avoidance ─────────────────────────────────
 # Track filenames within a batch to prevent duplicates, and check
@@ -464,6 +495,7 @@ def build_sneaker_prompt(design_name, theme, palette, drop_id="DROP-01",
     import random
     slogan = design_name.replace("_", " ").upper()
     style = random.choice(VISUAL_STYLES)
+    palette_instruction = _palette_instruction(palette)
 
     return {
         # Spreadsheet fields (required by update_workbooks.py --front A)
@@ -486,7 +518,10 @@ def build_sneaker_prompt(design_name, theme, palette, drop_id="DROP-01",
         "substring_match": "None",
         "tm_notes":        "",
         # Ideogram renders the complete design (text + optional graphic)
-        "image_prompt": style["prompt"].format(slogan=slogan, palette=palette),
+        "image_prompt": style["prompt"].format(
+            slogan=slogan,
+            palette=palette_instruction,
+        ),
         "negative_prompt": FRONT_A_NEGATIVE,
         "color_palette": palette,
         # No Pillow overlay needed when using Ideogram
@@ -502,7 +537,7 @@ VISUAL_STYLES_B = [
         "prompt": (
             '{niche} aesthetic t-shirt design, {sub_niche} themed '
             'illustration with hand-lettered text: "{phrase}", '
-            'warm earth tones, cozy inviting style, '
+            '{palette}, cozy inviting style, '
             'isolated on solid bright magenta (#FF00FF) background, t-shirt print ready, '
             'high contrast, clean edges, no brand logos'
         ),
@@ -514,7 +549,7 @@ VISUAL_STYLES_B = [
             'Delicate botanical wreath frame illustration with '
             'text: "{phrase}" in the center, '
             '{niche} aesthetic, {sub_niche} elements, '
-            'warm muted earth tones, minimalist line art, '
+            '{palette}, minimalist line art, '
             'isolated on solid bright magenta (#FF00FF) background, t-shirt print ready'
         ),
     },
@@ -524,7 +559,7 @@ VISUAL_STYLES_B = [
         "prompt": (
             'Simple {sub_niche} icon illustration above bold text: '
             '"{phrase}", {niche} aesthetic, '
-            'clean minimal design, warm tones, '
+            'clean minimal design, {palette}, '
             'centered composition, isolated on solid bright magenta (#FF00FF) background, '
             't-shirt print ready, high contrast'
         ),
@@ -535,7 +570,7 @@ VISUAL_STYLES_B = [
         "label": "Hand-lettered typography",
         "prompt": (
             'Hand-lettered typography design, text: "{phrase}", '
-            '{niche} aesthetic style, warm earthy color palette, '
+            '{niche} aesthetic style, {palette}, '
             'organic flowing letterforms, slight texture, '
             'isolated on solid bright magenta (#FF00FF) background, t-shirt print ready'
         ),
@@ -546,7 +581,7 @@ VISUAL_STYLES_B = [
         "prompt": (
             'Vintage retro sign typography design, text: "{phrase}", '
             '{niche} aesthetic, {sub_niche} theme, '
-            'aged worn texture, muted warm tones, '
+            'aged worn texture, {palette}, '
             'isolated on solid bright magenta (#FF00FF) background, t-shirt print ready'
         ),
     },
@@ -556,7 +591,7 @@ VISUAL_STYLES_B = [
         "label": "Illustration only (text added later)",
         "prompt": (
             '{sub_niche} themed illustration, {niche} aesthetic, '
-            'warm earth tones, minimalist style, '
+            '{palette}, minimalist style, '
             'clean centered composition with space for text, '
             'isolated on solid bright magenta (#FF00FF) background, t-shirt print ready, '
             'high contrast, no text, no letters, no words'
@@ -565,16 +600,50 @@ VISUAL_STYLES_B = [
     },
 ]
 
+VISUAL_STYLES_MASCOT = [
+    {
+        "id": "mascot_text",
+        "label": "Mascot character with bold text",
+        "prompt": (
+            'Streetwear t-shirt design featuring the cartoon chimp character '
+            'from the attached reference image. The chimp is shown {expression}. '
+            '{garment_desc} '
+            'The chimp has realistic brown fur with natural skin tones on the face and hands. '
+            'Bold streetwear text: "{slogan}", {palette} color palette, '
+            'centered composition, urban street culture aesthetic, '
+            'smooth color fields, no grain, no noise, '
+            'no background, transparent background, isolated artwork, '
+            'no brand logos, t-shirt print ready'
+        ),
+    },
+    {
+        "id": "mascot_badge",
+        "label": "Mascot in badge/emblem with text",
+        "prompt": (
+            'Vintage circular badge design featuring the cartoon chimp character '
+            'from the attached reference image, shown {expression}. '
+            '{garment_desc} '
+            'The chimp has realistic brown fur with natural skin tones on the face and hands. '
+            'Bold text: "{slogan}" around the badge border, '
+            '{palette} color palette, retro streetwear patch aesthetic, '
+            'centered composition, clean vector-style fills, '
+            'no background, transparent background, isolated artwork, '
+            't-shirt print ready'
+        ),
+    },
+]
+
 FRONT_B_NEGATIVE = (
     "brand logo, watermark, blurry, low quality, realistic human face, "
     "nsfw, copyrighted character, disney, marvel, pokemon, nintendo, "
     "busy background, misspelling, "
-    "magenta elements in design, pink text, magenta graphics"
+    "magenta elements in design, pink text, magenta graphics, "
+    "text hidden behind graphics, covered letters, unreadable text, cropped words"
 )
 
 
 def build_general_prompt(phrase, niche, sub_niche, style=None,
-                         output_dir=None):
+                         output_dir=None, palette="black and cream, vintage wash"):
     """
     Build a complete pipeline record for a Front B generalized design.
     Randomly picks a visual style — some have text rendered by AI,
@@ -585,6 +654,7 @@ def build_general_prompt(phrase, niche, sub_niche, style=None,
     vis = random.choice(VISUAL_STYLES_B) if style is None else VISUAL_STYLES_B[0]
 
     needs_overlay = vis.get("text_overlay", False)
+    palette_instruction = _palette_instruction(palette)
 
     return {
         # Spreadsheet fields (required by update_workbooks.py --front B)
@@ -605,8 +675,10 @@ def build_general_prompt(phrase, niche, sub_niche, style=None,
         "etsy_check":      "",
         "substring_match": "None",
         "tm_notes":        "",
+        "color_palette": palette,
         "image_prompt": vis["prompt"].format(
             phrase=phrase, niche=niche, sub_niche=sub_niche,
+            palette=palette_instruction,
         ),
         "negative_prompt": FRONT_B_NEGATIVE,
         # Only needs Pillow text overlay if style is illustration-only
@@ -630,14 +702,17 @@ def render_ideogram(record, output_dir):
     # Build Ideogram-specific prompt WITH text (Ideogram handles text well)
     slogan = record.get("slogan") or record.get("phrase", "")
     palette = record.get("color_palette", "black and cream, vintage wash")
+    palette_instruction = _palette_instruction(palette)
     style = record.get("style", "bold condensed streetwear typography")
 
     ideogram_prompt = (
         f"Minimalist streetwear typography design for t-shirt print, "
         f'{style}, text: "{slogan}", '
-        f"{palette} color palette, clean matte finish, centered layout, "
+        f"{palette_instruction}, clean matte finish, centered layout, "
         f"vintage streetwear aesthetic, isolated on solid bright magenta (#FF00FF) background, "
         f"high contrast, clean edges, t-shirt print ready, "
+        f"phrase must remain clearly readable and unobstructed by foreground elements, "
+        f"prefer phrase placement in top or bottom safe zone while preserving artwork size, "
         f"design fills most of the canvas with tight margins, no large empty areas, "
         f"smooth color fields, no grain, no speckle, no noise"
     )
@@ -855,13 +930,14 @@ def render_openai(record, output_dir, hd=False):
     """
     slogan = record.get("slogan") or record.get("phrase", "")
     palette = record.get("color_palette", "black and cream, vintage wash")
+    palette_instruction = _palette_instruction(palette)
     style = record.get("style", "bold condensed streetwear typography")
     quality = "hd" if hd else "standard"
 
     prompt = (
         f'Flat 2D streetwear typography design, {style}, '
         f'large bold text reading exactly "{slogan}", '
-        f'{palette} color palette, clean matte finish, '
+        f'{palette_instruction}, clean matte finish, '
         f'centered balanced composition, portrait orientation. '
         f'Design fills most of the canvas with tight margins (about 85-92% coverage). '
         f'Avoid large empty/blank background areas. '
@@ -897,11 +973,12 @@ def render_openai_graphic(record, output_dir, hd=False):
     """
     slogan = record.get("slogan") or record.get("phrase", "")
     palette = record.get("color_palette", "black and cream, vintage wash")
+    palette_instruction = _palette_instruction(palette)
     quality = "hd" if hd else "standard"
 
     prompt = (
         f'Flat 2D streetwear illustration, emblem or badge design, '
-        f'{palette} color palette, urban vintage aesthetic, '
+        f'{palette_instruction}, urban vintage aesthetic, '
         f'centered balanced composition, portrait orientation, '
         f'fills most of the canvas with tight margins (about 85-92% coverage), '
         f'avoid large empty/blank background areas, '
@@ -1010,12 +1087,13 @@ def render_gpt_image(record, output_dir, quality="medium"):
     """
     slogan = record.get("slogan") or record.get("phrase", "")
     palette = record.get("color_palette", "black and cream, vintage wash")
+    palette_instruction = _palette_instruction(palette)
     style = record.get("style", "bold condensed streetwear typography")
 
     prompt = (
         f'Flat 2D streetwear typography design, {style}, '
         f'large bold text reading exactly "{slogan}", '
-        f'{palette} color palette, clean matte finish, '
+        f'{palette_instruction}, clean matte finish, '
         f'centered balanced composition, portrait orientation. '
         f'Design fills most of the canvas with tight margins (about 85-92% coverage). '
         f'Avoid large empty/blank background areas. '
@@ -1050,10 +1128,11 @@ def render_gpt_image_graphic(record, output_dir, quality="medium"):
     """
     slogan = record.get("slogan") or record.get("phrase", "")
     palette = record.get("color_palette", "black and cream, vintage wash")
+    palette_instruction = _palette_instruction(palette)
 
     prompt = (
         f'Flat 2D streetwear illustration, emblem or badge design, '
-        f'{palette} color palette, urban vintage aesthetic, '
+        f'{palette_instruction}, urban vintage aesthetic, '
         f'centered balanced composition, portrait orientation, '
         f'fills most of the canvas with tight margins (about 85-92% coverage), '
         f'avoid large empty/blank background areas, '
@@ -1078,6 +1157,117 @@ def render_gpt_image_graphic(record, output_dir, quality="medium"):
         cost = cost_map.get(quality, "~$0.06")
         print(f"  [RENDER] GPT Image 1 graphic ({quality}): {record['filename']} ({cost})")
     return filepath
+
+
+def render_gpt_image_mascot(record, output_dir, quality="medium"):
+    """GPT Image 1: render mascot character design using reference sheet.
+    Uses /v1/images/edits (multipart) to pass the mascot sheet as a reference image."""
+    import random
+    if not OPENAI_API_KEY:
+        print("  [SKIP] OPENAI_API_KEY not set")
+        return None
+    if not os.path.isfile(MASCOT_SHEET):
+        print(f"  [SKIP] Mascot sheet not found at {MASCOT_SHEET}")
+        return None
+
+    slogan = record.get("slogan") or record.get("phrase", "")
+    palette = record.get("color_palette", "black and cream, vintage wash")
+    palette_instruction = _palette_instruction(palette)
+
+    # Pick expression
+    expression = record.get("_mascot_expression", "random")
+    if expression == "random":
+        expression = random.choice(MASCOT_EXPRESSIONS[1:])  # skip "random"
+    expression_desc = f"in a {expression} expression/pose"
+
+    # Garment coloring: match colorway or keep default
+    match_colorway = record.get("_mascot_match_colorway", False)
+    if match_colorway:
+        garment_desc = (
+            f'Character wears a backwards cap, oversized tee, pants, and sneakers — '
+            f'all garments colored to match the {palette_instruction} colorway.'
+        )
+    else:
+        garment_desc = (
+            'Character wears a backwards cap, oversized gray tee, dark pants, and sneakers.'
+        )
+
+    # Pick style
+    style = random.choice(VISUAL_STYLES_MASCOT)
+    prompt = style["prompt"].format(
+        slogan=slogan, palette=palette_instruction,
+        expression=expression_desc, garment_desc=garment_desc,
+    )
+
+    hint = record.get("_prompt_hint", "")
+    if hint:
+        prompt += f"\nAdditional style direction: {hint}"
+
+    # Use /v1/images/edits (multipart/form-data) to pass mascot reference image
+    try:
+        headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
+        with open(MASCOT_SHEET, "rb") as img_file:
+            files = [("image[]", ("mascot_ref.png", img_file, "image/png"))]
+            data = {
+                "model": "gpt-image-1",
+                "prompt": prompt,
+                "n": "1",
+                "size": "1024x1536",
+                "quality": quality,
+                "background": "transparent",
+                "output_format": "png",
+            }
+            response = requests.post(
+                "https://api.openai.com/v1/images/edits",
+                headers=headers, data=data, files=files, timeout=180,
+            )
+
+        # Fallback: retry without transparency/size params if rejected
+        if response.status_code == 400:
+            detail = ""
+            try:
+                detail = response.json().get("error", {}).get("message", "")
+            except Exception:
+                detail = (response.text or "").strip()
+            if detail:
+                print(f"  [WARN] GPT Image 1 mascot strict payload rejected: {detail}")
+            with open(MASCOT_SHEET, "rb") as img_file:
+                files = [("image[]", ("mascot_ref.png", img_file, "image/png"))]
+                fallback_data = {
+                    "model": "gpt-image-1",
+                    "prompt": prompt,
+                    "n": "1",
+                    "size": "1024x1024",
+                    "quality": quality,
+                }
+                response = requests.post(
+                    "https://api.openai.com/v1/images/edits",
+                    headers=headers, data=fallback_data, files=files, timeout=180,
+                )
+
+        response.raise_for_status()
+        b64_data = response.json()["data"][0]["b64_json"]
+        filepath = os.path.join(output_dir, record["filename"])
+        with open(filepath, "wb") as f:
+            f.write(base64.b64decode(b64_data))
+        record["_text_overlay"] = None  # text rendered by AI
+        record["_transparent_bg"] = True
+        cost_map = {"low": "~$0.02", "medium": "~$0.06", "high": "~$0.26"}
+        cost = cost_map.get(quality, "~$0.06")
+        print(f"  [RENDER] GPT Image 1 mascot ({quality}): {record['filename']} ({cost})")
+        return filepath
+    except Exception as e:
+        detail = ""
+        try:
+            if "response" in locals() and response is not None and response.text:
+                detail = response.text.strip()
+        except Exception:
+            pass
+        if detail:
+            print(f"  [ERR] GPT Image 1 mascot failed for {record['filename']}: {e} | API: {detail}")
+        else:
+            print(f"  [ERR] GPT Image 1 mascot failed for {record['filename']}: {e}")
+        return None
 
 
 _esrgan_model = None
@@ -1207,7 +1397,7 @@ def stage_trim_and_fill(records, designs_dir, target_w=4500, target_h=5400,
     return records
 
 
-def stage_ideogram_text(records, designs_dir):
+def stage_ideogram_text(records, designs_dir, phrase_visibility_mode="balanced"):
     """
     Stage 2b (Ideogram): Add text to HuggingFace-generated graphics
     using Ideogram's remix API. Ideogram re-renders the design with
@@ -1219,6 +1409,11 @@ def stage_ideogram_text(records, designs_dir):
         return records
 
     composited = 0
+    visibility_instruction = {
+        "strict": "text must be fully visible (100%) with no overlap",
+        "balanced": "text must be at least 90% visible with no major overlap",
+        "flexible": "text must be clearly readable with minimal overlap",
+    }.get((phrase_visibility_mode or "balanced").lower(), "text must be at least 90% visible with no major overlap")
     for record in records:
         text = record.get("_text_overlay", "")
         if not text:
@@ -1231,12 +1426,15 @@ def stage_ideogram_text(records, designs_dir):
             continue
 
         palette = record.get("color_palette", "black and cream, vintage wash")
+        palette_instruction = _palette_instruction(palette)
         style_label = record.get("style", "bold streetwear typography")
 
         remix_prompt = (
             f'Streetwear typography design for t-shirt print, '
             f'{style_label}, add bold prominent text: "{text}", '
-            f'{palette} color palette, centered layout, '
+            f'{palette_instruction}, centered layout, '
+            f'{visibility_instruction}, '
+            f'prefer phrase placement in top or bottom safe zone while preserving artwork size, '
             f'vintage streetwear aesthetic, high contrast, clean edges, '
             f'isolated on solid bright magenta (#FF00FF) background, t-shirt print ready'
         )
@@ -1284,7 +1482,9 @@ def stage_ideogram_text(records, designs_dir):
     return records
 
 
-def stage_text_overlay(records, designs_dir, font_path=None, font_size=None):
+def stage_text_overlay(records, designs_dir, font_path=None, font_size=None,
+                       min_phrase_visibility=0.90,
+                       phrase_visibility_mode="balanced"):
     """
     Stage 2b: Composite phrase text onto AI-generated graphic backgrounds.
     This is the key step — AI generates the visual, Pillow adds clean text.
@@ -1292,6 +1492,7 @@ def stage_text_overlay(records, designs_dir, font_path=None, font_size=None):
     """
     from inspect_designs import add_text_overlay
     composited = 0
+    below_target = 0
 
     for record in records:
         text = record.get("_text_overlay", "")
@@ -1305,17 +1506,33 @@ def stage_text_overlay(records, designs_dir, font_path=None, font_size=None):
             continue
 
         try:
-            add_text_overlay(
+            overlay_meta = add_text_overlay(
                 filepath, text, filepath,
                 font_path=font_path,
                 font_size=font_size,
                 text_color=None,  # auto-detect based on background brightness
+                min_visibility=min_phrase_visibility,
+                layout_mode="safe_zone",
             )
+
+            if isinstance(overlay_meta, dict):
+                visibility = float(overlay_meta.get("visibility", 0.0))
+                record["phrase_visibility"] = round(visibility, 3)
+                record["phrase_visibility_mode"] = phrase_visibility_mode
+                if visibility < min_phrase_visibility:
+                    below_target += 1
+                    print(
+                        f"  [WARN] Phrase visibility below target for {record['filename']}: "
+                        f"{visibility:.2f} < {min_phrase_visibility:.2f}"
+                    )
             composited += 1
         except Exception as e:
             print(f"  [ERR] Text overlay failed for {record['filename']}: {e}")
 
-    print(f"  [STAGE 2b] Text composited onto {composited}/{len(records)} designs")
+    print(
+        f"  [STAGE 2b] Text composited onto {composited}/{len(records)} designs "
+        f"(below target: {below_target})"
+    )
     return records
 
 
@@ -1370,11 +1587,13 @@ def stage_generate_prompts_a(drop_id, themes=None, palette_index=0,
 
 def stage_generate_prompts_b(phrases_csv=None, phrases=None,
                              niche="General", sub_niche="General",
-                             style="minimalist line art", output_dir=None):
+                             style="minimalist line art", output_dir=None,
+                             palette_index=0):
     """Stage 1: Generate prompt records for Front B from phrases."""
     global _batch_filenames
     _batch_filenames = set()
     _load_known_filenames(output_dir)
+    palette = PALETTE_OPTIONS[palette_index % len(PALETTE_OPTIONS)]
     phrase_list = list(phrases or [])
 
     if phrases_csv and os.path.isfile(phrases_csv):
@@ -1389,7 +1608,7 @@ def stage_generate_prompts_b(phrases_csv=None, phrases=None,
     records = []
     for phrase in phrase_list:
         records.append(build_general_prompt(
-            phrase, niche, sub_niche, style, output_dir))
+            phrase, niche, sub_niche, style, output_dir, palette=palette))
     print(f"  [STAGE 1] Generated {len(records)} Front B prompt records")
     return records
 
@@ -1558,6 +1777,7 @@ def cmd_batch(args):
             sub_niche=args.sub_niche or "General",
             style=args.style or "minimalist line art",
             output_dir=designs_dir,
+            palette_index=args.palette or 0,
         )
         log_name = f"front_b_batch_{today}.json"
 
@@ -1572,11 +1792,17 @@ def cmd_batch(args):
         records = _rnd.sample(records, args.count)
         print(f"  [COUNT] Sampled {args.count} of {total} records")
 
-    # Thread prompt hint into records
+    # Thread prompt hint and mascot options into records
     prompt_hint = getattr(args, "prompt_hint", "") or ""
-    if prompt_hint:
-        for r in records:
+    mascot_expression = getattr(args, "mascot_expression", "random") or "random"
+    mascot_match_colorway = getattr(args, "mascot_match_colorway", False)
+    phrase_visibility_mode = getattr(args, "phrase_visibility_mode", "balanced")
+    min_phrase_visibility = _phrase_visibility_threshold(phrase_visibility_mode)
+    for r in records:
+        if prompt_hint:
             r["_prompt_hint"] = prompt_hint
+        r["_mascot_expression"] = mascot_expression
+        r["_mascot_match_colorway"] = mascot_match_colorway
 
     # Stage 2: Render (optional)
     if args.render:
@@ -1588,29 +1814,37 @@ def cmd_batch(args):
                     "openai": render_openai,
                     "openai_graphic": render_openai_graphic,
                     "gpt_image": render_gpt_image,
-                    "gpt_image_graphic": render_gpt_image_graphic}.get(args.render)
+                    "gpt_image_graphic": render_gpt_image_graphic,
+                    "mascot_gpt_image": render_gpt_image_mascot}.get(args.render)
         if renderer and getattr(args, "openai_hd", False) and args.render in ("openai", "openai_graphic"):
             renderer = functools.partial(renderer, hd=True)
         gpt_q = getattr(args, "gpt_quality", None)
-        if renderer and gpt_q and args.render in ("gpt_image", "gpt_image_graphic"):
+        if renderer and gpt_q and args.render in ("gpt_image", "gpt_image_graphic", "mascot_gpt_image"):
             renderer = functools.partial(renderer, quality=gpt_q)
         if renderer:
             records = stage_render(records, renderer, designs_dir)
             # Stage 2b: Add text to rendered graphics
             if not args.no_text_overlay:
                 if args.text_renderer == "ideogram":
-                    records = stage_ideogram_text(records, designs_dir)
+                    records = stage_ideogram_text(
+                        records, designs_dir,
+                        phrase_visibility_mode=phrase_visibility_mode,
+                    )
                     # Fallback: any designs that Ideogram didn't handle
                     records = stage_text_overlay(
                         records, designs_dir,
                         font_path=args.font,
                         font_size=args.font_size,
+                        min_phrase_visibility=min_phrase_visibility,
+                        phrase_visibility_mode=phrase_visibility_mode,
                     )
                 else:
                     records = stage_text_overlay(
                         records, designs_dir,
                         font_path=args.font,
                         font_size=args.font_size,
+                        min_phrase_visibility=min_phrase_visibility,
+                        phrase_visibility_mode=phrase_visibility_mode,
                     )
         else:
             print(f"  Unknown renderer: {args.render}")
@@ -1778,6 +2012,7 @@ def cmd_variant(args):
             args.niche or "General",
             args.sub_niche or "General",
             output_dir=designs_dir,
+            palette=palette,
         )]
         log_name = f"front_b_variant_{today}.json"
 
@@ -1787,11 +2022,17 @@ def cmd_variant(args):
 
     print(f"\n  Generating variant: {clean_name} with palette: {palette}\n")
 
-    # Thread prompt hint into records
+    # Thread prompt hint and mascot options into records
     prompt_hint = getattr(args, "prompt_hint", "") or ""
-    if prompt_hint:
-        for r in records:
+    mascot_expression = getattr(args, "mascot_expression", "random") or "random"
+    mascot_match_colorway = getattr(args, "mascot_match_colorway", False)
+    phrase_visibility_mode = getattr(args, "phrase_visibility_mode", "balanced")
+    min_phrase_visibility = _phrase_visibility_threshold(phrase_visibility_mode)
+    for r in records:
+        if prompt_hint:
             r["_prompt_hint"] = prompt_hint
+        r["_mascot_expression"] = mascot_expression
+        r["_mascot_match_colorway"] = mascot_match_colorway
 
     # Render
     if args.render:
@@ -1802,25 +2043,33 @@ def cmd_variant(args):
                     "openai": render_openai,
                     "openai_graphic": render_openai_graphic,
                     "gpt_image": render_gpt_image,
-                    "gpt_image_graphic": render_gpt_image_graphic}.get(args.render)
+                    "gpt_image_graphic": render_gpt_image_graphic,
+                    "mascot_gpt_image": render_gpt_image_mascot}.get(args.render)
         if renderer and getattr(args, "openai_hd", False) and args.render in ("openai", "openai_graphic"):
             renderer = functools.partial(renderer, hd=True)
         gpt_q = getattr(args, "gpt_quality", None)
-        if renderer and gpt_q and args.render in ("gpt_image", "gpt_image_graphic"):
+        if renderer and gpt_q and args.render in ("gpt_image", "gpt_image_graphic", "mascot_gpt_image"):
             renderer = functools.partial(renderer, quality=gpt_q)
         if renderer:
             records = stage_render(records, renderer, designs_dir)
             if not args.no_text_overlay:
                 if args.text_renderer == "ideogram":
-                    records = stage_ideogram_text(records, designs_dir)
+                    records = stage_ideogram_text(
+                        records, designs_dir,
+                        phrase_visibility_mode=phrase_visibility_mode,
+                    )
                     records = stage_text_overlay(
                         records, designs_dir,
                         font_path=args.font, font_size=args.font_size,
+                        min_phrase_visibility=min_phrase_visibility,
+                        phrase_visibility_mode=phrase_visibility_mode,
                     )
                 else:
                     records = stage_text_overlay(
                         records, designs_dir,
                         font_path=args.font, font_size=args.font_size,
+                        min_phrase_visibility=min_phrase_visibility,
+                        phrase_visibility_mode=phrase_visibility_mode,
                     )
 
             # Stage 2c: Remove background
@@ -1866,7 +2115,8 @@ def main():
     batch.add_argument("--style", help="Design style for Front B")
     batch.add_argument("--render", choices=["ideogram", "leonardo", "hf", "huggingface",
                                             "openai", "openai_graphic",
-                                            "gpt_image", "gpt_image_graphic"],
+                                            "gpt_image", "gpt_image_graphic",
+                                            "mascot_gpt_image"],
                        help="Render images via API (hf = Hugging Face free tier)")
     batch.add_argument("--font", help="Path to .ttf font for text overlay")
     batch.add_argument("--font-size", type=int, default=None,
@@ -1886,6 +2136,13 @@ def main():
                        help="Quality tier for GPT Image 1 (low ~$0.02, medium ~$0.06, high ~$0.26)")
     batch.add_argument("--prompt-hint", type=str, default="",
                        help="Custom style hint appended to the prompt (e.g. 'make it flashy')")
+    batch.add_argument("--mascot-expression", choices=MASCOT_EXPRESSIONS, default="random",
+                       help="Mascot expression/pose (only used with --render mascot_gpt_image)")
+    batch.add_argument("--mascot-match-colorway", action="store_true",
+                       help="Recolor mascot garments to match the selected colorway palette")
+    batch.add_argument("--phrase-visibility-mode", choices=["strict", "balanced", "flexible"],
+                       default="balanced",
+                       help="Phrase visibility target (strict=100%, balanced=90%, flexible=80%)")
     batch.add_argument("--no-ai-upscale", action="store_true",
                        help="Skip Real-ESRGAN AI upscale (use LANCZOS only)")
     batch.add_argument("--skip-api", action="store_true",
@@ -1918,7 +2175,8 @@ def main():
     var.add_argument("--render",
                      choices=["ideogram", "leonardo", "hf", "huggingface",
                               "openai", "openai_graphic",
-                              "gpt_image", "gpt_image_graphic"],
+                              "gpt_image", "gpt_image_graphic",
+                              "mascot_gpt_image"],
                      help="Render images via API")
     var.add_argument("--text-renderer", choices=["pillow", "ideogram"],
                      default="pillow")
@@ -1932,6 +2190,13 @@ def main():
                      help="Quality tier for GPT Image 1 (low ~$0.02, medium ~$0.06, high ~$0.26)")
     var.add_argument("--prompt-hint", type=str, default="",
                      help="Custom style hint appended to the prompt")
+    var.add_argument("--mascot-expression", choices=MASCOT_EXPRESSIONS, default="random",
+                     help="Mascot expression/pose (only used with --render mascot_gpt_image)")
+    var.add_argument("--mascot-match-colorway", action="store_true",
+                     help="Recolor mascot garments to match the selected colorway palette")
+    var.add_argument("--phrase-visibility-mode", choices=["strict", "balanced", "flexible"],
+                     default="balanced",
+                     help="Phrase visibility target (strict=100%, balanced=90%, flexible=80%)")
     var.add_argument("--no-ai-upscale", action="store_true",
                      help="Skip Real-ESRGAN AI upscale (use LANCZOS only)")
     var.add_argument("--skip-api", action="store_true")

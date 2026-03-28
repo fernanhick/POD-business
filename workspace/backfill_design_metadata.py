@@ -15,11 +15,14 @@ A_FILE = SPREADSHEETS_DIR / "designs_front_a.xlsx"
 B_FILE = SPREADSHEETS_DIR / "designs_front_b.xlsx"
 APP_DB = WORKSPACE_DIR.parent / "webapp" / "backend" / "app" / "app_state.db"
 
-PALETTE_OPTIONS = [
+ORIGINAL_PALETTE_OPTIONS = [
     "black and cream, vintage wash",
     "off-white and charcoal, clean matte finish",
     "forest green and ecru, military aesthetic",
     "washed black and bone white, faded streetwear",
+]
+
+EXTENDED_PALETTE_OPTIONS = [
     "navy blue and gold, luxury streetwear",
     "burgundy and cream, vintage sport aesthetic",
     "rust orange and sand, earth tone warmth",
@@ -33,6 +36,8 @@ PALETTE_OPTIONS = [
     "lavender and slate, muted pastel",
     "red and black, bold graphic",
 ]
+
+PALETTE_OPTIONS = ORIGINAL_PALETTE_OPTIONS + EXTENDED_PALETTE_OPTIONS
 
 VISUAL_MODE_TO_MODEL = {
     "text_only": "ideogram",

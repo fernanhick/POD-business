@@ -34,6 +34,23 @@ DEFAULT_SECTIONS = [
 ]
 
 DB_PATH = Path(__file__).resolve().parents[4] / "workspace" / "pinterest" / "pinterest.db"
+ETSY_TITLE_MAX = 140
+ETSY_DESCRIPTION_MAX = 2800
+
+
+def _clip_text(value: str, max_length: int) -> str:
+    value = (value or "").strip()
+    if len(value) <= max_length:
+        return value
+
+    clipped = value[: max_length + 1].rsplit(" ", 1)[0].rstrip(" ,;:-|/")
+    if clipped and len(clipped) >= int(max_length * 0.6):
+        return clipped
+    return value[:max_length].rstrip(" ,;:-|/")
+
+
+def _normalize_listing_text(title: str, description: str) -> tuple[str, str]:
+    return _clip_text(title, ETSY_TITLE_MAX), _clip_text(description, ETSY_DESCRIPTION_MAX)
 
 
 def _get_conn() -> sqlite3.Connection:
@@ -385,9 +402,10 @@ def create_draft_listing(
         raise RuntimeError("Missing Etsy listing config: " + ", ".join(missing))
 
     shop_id = get_numeric_shop_id()
+    title, description = _normalize_listing_text(title, description)
     payload = {
         "quantity": str(max(1, int(quantity))),
-        "title": title[:140],
+        "title": title,
         "description": description,
         "price": f"{float(price):.2f}",
         "who_made": "i_did",

@@ -3,11 +3,13 @@ import { api } from "./api";
 import PinterestTab from "./pinterest/PinterestTab";
 import EtsySetup from "./etsy/EtsySetup";
 import KeysSetup from "./setup/KeysSetup";
+import PrepareTab from "./prepare/PrepareTab";
 
 const NAV_ITEMS = [
   "Dashboard",
   "Designs",
   "Generate",
+  "Prepare",
   "Expenses",
   "Jobs",
   "Setup",
@@ -18,6 +20,7 @@ const NAV_ITEMS = [
 const initialGeneration = {
   designType: "sneaker",
   visualMode: "random",
+  phraseVisibilityMode: "balanced",
   palette: "0",
   count: "0",
   dropId: "",
@@ -27,6 +30,8 @@ const initialGeneration = {
   skipApi: false,
   openaiHd: false,
   gptQuality: "medium",
+  mascotExpression: "random",
+  mascotMatchColorway: false,
   promptHint: "",
 };
 
@@ -38,11 +43,14 @@ const COUNT_OPTIONS = [
   { value: "custom", label: "Custom amount..." },
 ];
 
-const PALETTE_OPTIONS = [
+const ORIGINAL_PALETTE_OPTIONS = [
   { value: "0", label: "Black & Cream (vintage wash)" },
   { value: "1", label: "Off-white & Charcoal (distressed)" },
   { value: "2", label: "Forest Green & Ecru (military)" },
   { value: "3", label: "Washed Black & Bone White (faded)" },
+];
+
+const EXTENDED_PALETTE_OPTIONS = [
   { value: "4", label: "Navy & Gold (luxury streetwear)" },
   { value: "5", label: "Burgundy & Cream (vintage sport)" },
   { value: "6", label: "Rust Orange & Sand (earth tone)" },
@@ -56,6 +64,30 @@ const PALETTE_OPTIONS = [
   { value: "14", label: "Lavender & Slate (muted pastel)" },
   { value: "15", label: "Red & Black (bold graphic)" },
 ];
+
+const PALETTE_OPTIONS = [
+  ...ORIGINAL_PALETTE_OPTIONS,
+  ...EXTENDED_PALETTE_OPTIONS,
+];
+
+function renderPaletteOptions() {
+  return [
+    <optgroup key="original-colorways" label="Original Colorways">
+      {ORIGINAL_PALETTE_OPTIONS.map((p) => (
+        <option key={p.value} value={p.value}>
+          {p.label}
+        </option>
+      ))}
+    </optgroup>,
+    <optgroup key="new-colorways" label="New Colorways">
+      {EXTENDED_PALETTE_OPTIONS.map((p) => (
+        <option key={p.value} value={p.value}>
+          {p.label}
+        </option>
+      ))}
+    </optgroup>,
+  ];
+}
 
 const VISUAL_MODE_HINTS = {
   random:
@@ -74,6 +106,8 @@ const VISUAL_MODE_HINTS = {
     "GPT Image 1 renders complete design with text — native transparent bg, ~98% text accuracy (~$0.02 low / ~$0.06 med / ~$0.26 high).",
   graphic_gpt_image:
     "GPT Image 1 generates graphic only, no text — native transparent bg (~$0.02 low / ~$0.06 med / ~$0.26 high).",
+  mascot_gpt_image:
+    "GPT Image 1 generates mascot chimp character with text — uses reference sheet for consistency (~$0.02 low / ~$0.06 med / ~$0.26 high).",
 };
 
 const initialExpense = {
@@ -241,6 +275,7 @@ export function App() {
       const payload = {
         designType: generationForm.designType,
         visualMode: generationForm.visualMode,
+        phraseVisibilityMode: generationForm.phraseVisibilityMode,
         palette: Number(generationForm.palette),
         count: Number(generationForm.count) || 0,
         dropId: generationForm.dropId || null,
@@ -251,6 +286,8 @@ export function App() {
         openaiHd: generationForm.openaiHd,
         gptQuality: generationForm.gptQuality,
         promptHint: generationForm.promptHint,
+        mascotExpression: generationForm.mascotExpression,
+        mascotMatchColorway: generationForm.mascotMatchColorway,
       };
       const result = await api.generate(payload);
       setGenModal({
@@ -278,6 +315,7 @@ export function App() {
         designName: variantForm.designName,
         palette: Number(variantForm.palette),
         visualMode: variantForm.visualMode,
+        phraseVisibilityMode: variantForm.phraseVisibilityMode || "balanced",
         phrase: variantForm.phrase || null,
         niche: variantForm.niche || null,
         subNiche: variantForm.subNiche || null,
@@ -285,6 +323,8 @@ export function App() {
         openaiHd: variantForm.openaiHd || false,
         gptQuality: variantForm.gptQuality || "medium",
         promptHint: variantForm.promptHint || "",
+        mascotExpression: variantForm.mascotExpression || "random",
+        mascotMatchColorway: variantForm.mascotMatchColorway || false,
       };
       const result = await api.variant(payload);
       setVariantForm(null);
@@ -587,7 +627,7 @@ export function App() {
                 </div>
               </div>
               <div className="card">
-                <h3>General Total</h3>
+                <h3>Fitness Total</h3>
                 <div className="value">
                   {summary?.designs?.general?.total ?? "-"}
                 </div>
@@ -615,7 +655,7 @@ export function App() {
                   {summary?.designs?.sneaker?.rejected ?? 0}
                 </span>
                 <span>
-                  General: G {summary?.designs?.general?.generated ?? 0} / A{" "}
+                  Fitness: G {summary?.designs?.general?.generated ?? 0} / A{" "}
                   {summary?.designs?.general?.approved ?? 0} / R{" "}
                   {summary?.designs?.general?.rejected ?? 0}
                 </span>
@@ -674,7 +714,7 @@ export function App() {
               >
                 <option value="">All Types</option>
                 <option value="sneaker">Sneaker</option>
-                <option value="general">General</option>
+                <option value="general">Fitness</option>
               </select>
             </div>
             <div className="table-wrap">
@@ -917,6 +957,7 @@ export function App() {
                               subNiche: "",
                               palette: "1",
                               visualMode: "text_only",
+                              phraseVisibilityMode: "balanced",
                             })
                           }
                         >
@@ -948,11 +989,7 @@ export function App() {
                       }))
                     }
                   >
-                    {PALETTE_OPTIONS.map((p) => (
-                      <option key={p.value} value={p.value}>
-                        {p.label}
-                      </option>
-                    ))}
+                    {renderPaletteOptions()}
                   </select>
                   <select
                     value={variantForm.visualMode}
@@ -981,6 +1018,25 @@ export function App() {
                     </option>
                     <option value="graphic_gpt_image">
                       Graphic Only (GPT Image 1, no text)
+                    </option>
+                  </select>
+                  <select
+                    value={variantForm.phraseVisibilityMode || "balanced"}
+                    onChange={(e) =>
+                      setVariantForm((old) => ({
+                        ...old,
+                        phraseVisibilityMode: e.target.value,
+                      }))
+                    }
+                  >
+                    <option value="strict">
+                      Phrase visibility: Strict (100%)
+                    </option>
+                    <option value="balanced">
+                      Phrase visibility: Balanced (90%)
+                    </option>
+                    <option value="flexible">
+                      Phrase visibility: Flexible (80%)
                     </option>
                   </select>
                   {variantForm.visualMode.includes("openai") && (
@@ -1054,7 +1110,7 @@ export function App() {
                 }
               >
                 <option value="sneaker">Sneaker Culture (Front A)</option>
-                <option value="general">General Niche (Front B)</option>
+                <option value="general">Functional Fitness (Front B)</option>
               </select>
 
               <select
@@ -1085,6 +1141,9 @@ export function App() {
                 </option>
                 <option value="graphic_gpt_image">
                   Graphic Only (GPT Image 1, no text)
+                </option>
+                <option value="mascot_gpt_image">
+                  Mascot Character + Text (GPT Image 1)
                 </option>
               </select>
 
@@ -1124,6 +1183,48 @@ export function App() {
                 </select>
               )}
 
+              {generationForm.visualMode === "mascot_gpt_image" && (
+                <select
+                  value={generationForm.mascotExpression}
+                  onChange={(e) =>
+                    setGenerationForm((old) => ({
+                      ...old,
+                      mascotExpression: e.target.value,
+                    }))
+                  }
+                >
+                  <option value="random">Random expression</option>
+                  <option value="stern">Stern</option>
+                  <option value="happy">Happy</option>
+                  <option value="surprised">Surprised</option>
+                  <option value="laughing">Laughing</option>
+                  <option value="annoyed">Annoyed</option>
+                  <option value="thinking">Thinking</option>
+                  <option value="wink">Wink</option>
+                  <option value="nervous">Nervous</option>
+                  <option value="huh">Huh?</option>
+                  <option value="sleepy">Sleepy</option>
+                  <option value="shocked">Shocked / Gasp</option>
+                  <option value="calm">Calm</option>
+                </select>
+              )}
+
+              {generationForm.visualMode === "mascot_gpt_image" && (
+                <label className="row">
+                  <input
+                    type="checkbox"
+                    checked={generationForm.mascotMatchColorway}
+                    onChange={(e) =>
+                      setGenerationForm((old) => ({
+                        ...old,
+                        mascotMatchColorway: e.target.checked,
+                      }))
+                    }
+                  />
+                  Match garment colors to colorway palette
+                </label>
+              )}
+
               <input
                 type="text"
                 placeholder="Style hint (e.g. 'make it flashy', 'retro vibe')"
@@ -1145,12 +1246,14 @@ export function App() {
                   }))
                 }
               >
-                {PALETTE_OPTIONS.map((p) => (
-                  <option key={p.value} value={p.value}>
-                    {p.label}
-                  </option>
-                ))}
+                {renderPaletteOptions()}
               </select>
+
+              <div className="hint-text">
+                Selected colorway is fixed for the generation job. Only
+                <strong> Visual Mode </strong>
+                changes when set to Random.
+              </div>
 
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <select
@@ -1250,40 +1353,6 @@ export function App() {
                       }))
                     }
                   />
-                  <select
-                    value={generationForm.niche}
-                    onChange={(e) =>
-                      setGenerationForm((old) => ({
-                        ...old,
-                        niche: e.target.value,
-                      }))
-                    }
-                  >
-                    <option value="">Any Niche</option>
-                    {(generationOptions.general?.niches || []).map((niche) => (
-                      <option key={niche} value={niche}>
-                        {niche}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={generationForm.subNiche}
-                    onChange={(e) =>
-                      setGenerationForm((old) => ({
-                        ...old,
-                        subNiche: e.target.value,
-                      }))
-                    }
-                  >
-                    <option value="">Any Sub-Niche</option>
-                    {(generationOptions.general?.subNiches || []).map(
-                      (subNiche) => (
-                        <option key={subNiche} value={subNiche}>
-                          {subNiche}
-                        </option>
-                      ),
-                    )}
-                  </select>
                 </>
               )}
 
@@ -1308,6 +1377,8 @@ export function App() {
             </div>
           </form>
         )}
+
+        {tab === "Prepare" && <PrepareTab />}
 
         {tab === "Expenses" && (
           <>
@@ -1710,6 +1781,24 @@ export function App() {
                   {modalState.index + 1} / {modalState.items.length}
                 </div>
               )}
+
+              <select
+                value={generationForm.phraseVisibilityMode}
+                onChange={(e) =>
+                  setGenerationForm((old) => ({
+                    ...old,
+                    phraseVisibilityMode: e.target.value,
+                  }))
+                }
+              >
+                <option value="strict">Phrase visibility: Strict (100%)</option>
+                <option value="balanced">
+                  Phrase visibility: Balanced (90%)
+                </option>
+                <option value="flexible">
+                  Phrase visibility: Flexible (80%)
+                </option>
+              </select>
               <img
                 src={modalImage.src}
                 alt={modalImage.alt}

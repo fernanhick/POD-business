@@ -44,3 +44,4 @@ workspace/pinterest/export/
 workspace/pinterest/pins/
 workspace/pinterest/pinterest.db
 workspace/spreadsheets/*.xlsx
+workspace/branding/

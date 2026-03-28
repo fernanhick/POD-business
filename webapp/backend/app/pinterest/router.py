@@ -322,6 +322,24 @@ def create_boards():
     return {"boards": boards}
 
 
+@router.post("/setup/exchange-code")
+def manual_exchange_code(payload: dict):
+    """Manual fallback: paste the ?code= value from the URL bar after Pinterest auth."""
+    code = payload.get("code", "").strip()
+    if not code:
+        raise HTTPException(status_code=400, detail="Missing 'code' parameter")
+    from .setup_service import exchange_code_for_tokens
+    try:
+        data = exchange_code_for_tokens(code)
+        return {
+            "success": True,
+            "has_access_token": bool(data.get("access_token")),
+            "has_refresh_token": bool(data.get("refresh_token")),
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
 @router.post("/setup/refresh-token")
 def refresh_token():
     from .setup_service import refresh_access_token

@@ -17,9 +17,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from openpyxl import load_workbook
@@ -36,6 +36,8 @@ try:
         publish_product as printify_publish_product,
         get_product as printify_get_product,
         update_spreadsheet_ids as printify_update_spreadsheet_ids,
+        build_listing_copy as printify_build_listing_copy,
+        display_name_from_filename as printify_display_name_from_filename,
         FRONT_CONFIG as PRINTIFY_CONFIG,
     )
     _PRINTIFY_AVAILABLE = True
@@ -98,7 +100,19 @@ FRONT_CONFIG = {
         "spreadsheet": SPREADSHEETS_DIR / "designs_front_b.xlsx",
         "phrase_col": "Phrase / Concept",
     },
+    "custom": {
+        "code": "C",
+        "design_folder": WORKSPACE_DIR / "front_custom" / "approved",
+        "approved_folder": WORKSPACE_DIR / "front_custom" / "approved",
+        "rejected_folder": WORKSPACE_DIR / "front_custom" / "rejected",
+        "spreadsheet": None,
+        "phrase_col": None,
+    },
 }
+
+PREPARE_DIR = WORKSPACE_DIR / "prepare"
+PREPARE_UPLOADS_DIR = PREPARE_DIR / "uploads"
+PREPARE_PROCESSED_DIR = PREPARE_DIR / "processed"
 
 FINANCIALS_FILE = SPREADSHEETS_DIR / "financials.xlsx"
 TM_LOG_FILE = SPREADSHEETS_DIR / "trademark_log.xlsx"
@@ -117,6 +131,18 @@ app.add_middleware(
 if _PINTEREST_AVAILABLE:
     app.include_router(pinterest_router, prefix="/api/pinterest", tags=["pinterest"])
 
+    @app.get("/callback/")
+    def pinterest_oauth_callback(code: str = Query(default=None), error: str = Query(default=None)):
+        """Root-level OAuth callback — matches the redirect URI registered with Pinterest."""
+        if error or not code:
+            return {"status": "error", "detail": error or "No code received"}
+        try:
+            from app.pinterest.setup_service import exchange_code_for_tokens
+            data = exchange_code_for_tokens(code)
+            return {"status": "success", "has_access_token": bool(data.get("access_token")), "has_refresh_token": bool(data.get("refresh_token"))}
+        except Exception as exc:
+            return {"status": "error", "detail": str(exc)}
+
 if _ETSY_AVAILABLE:
     app.include_router(etsy_router, prefix="/api/etsy", tags=["etsy"])
 
@@ -127,6 +153,7 @@ class GenerationRequest(BaseModel):
         "random", "text_only", "graphic_text", "graphic_only",
         "text_only_openai", "graphic_openai",
         "text_gpt_image", "graphic_gpt_image",
+        "mascot_gpt_image",
     ] = "random"
     palette: int = 0
     count: int = 0
@@ -138,6 +165,9 @@ class GenerationRequest(BaseModel):
     openaiHd: bool = False
     gptQuality: str = "medium"
     promptHint: str = ""
+    phraseVisibilityMode: Literal["strict", "balanced", "flexible"] = "balanced"
+    mascotExpression: str = "random"
+    mascotMatchColorway: bool = False
 
 
 class VariantRequest(BaseModel):
@@ -148,6 +178,7 @@ class VariantRequest(BaseModel):
         "text_only", "graphic_text", "graphic_only",
         "text_only_openai", "graphic_openai",
         "text_gpt_image", "graphic_gpt_image",
+        "mascot_gpt_image",
     ] = "text_only"
     phrase: str | None = None
     niche: str | None = None
@@ -156,6 +187,9 @@ class VariantRequest(BaseModel):
     openaiHd: bool = False
     gptQuality: str = "medium"
     promptHint: str = ""
+    phraseVisibilityMode: Literal["strict", "balanced", "flexible"] = "balanced"
+    mascotExpression: str = "random"
+    mascotMatchColorway: bool = False
 
 
 class ApprovalRequest(BaseModel):
@@ -166,7 +200,7 @@ class ApprovalRequest(BaseModel):
 
 
 class PrintifyUploadRequest(BaseModel):
-    designType: Literal["general", "sneaker"]
+    designType: Literal["general", "sneaker", "custom"]
     filename: str
     productType: Literal["tshirt", "hoodie"] = "tshirt"
     provider: Literal["printify", "printful"] = "printify"  # Provider choice
@@ -206,6 +240,14 @@ class ExpenseCreate(BaseModel):
 
 class ExpenseUpdate(ExpenseCreate):
     expenseId: str
+
+
+class PrepareProcessRequest(BaseModel):
+    image_ids: list[str]
+
+
+class PreparePublishRequest(BaseModel):
+    image_id: str
 
 
 def _unique_values_from_sheet(file_path: Path, sheet_name: str, column_name: str) -> list[str]:
@@ -248,32 +290,31 @@ def _get_phrase_bank() -> list[str]:
 
 
 def _build_random_phrase_samples(count: int) -> list[str]:
-    samples = _get_phrase_bank()
     token_pool: list[str] = []
-    for text in samples:
+    for text in _FITNESS_PHRASES:
         token_pool.extend(re.findall(r"[A-Za-z]{3,}", text.lower()))
 
     token_pool = list({token for token in token_pool if len(token) >= 3})
     if len(token_pool) < 3:
         token_pool = [
-            "collectors",
-            "street",
-            "culture",
-            "hustle",
-            "vibes",
-            "energy",
-            "legacy",
-            "daily",
-            "club",
-            "archive",
+            "lift",
+            "barbell",
+            "gains",
+            "strong",
+            "grind",
+            "beast",
+            "iron",
+            "sweat",
+            "squad",
+            "reps",
         ]
 
     templates = [
         "{a} {b}",
         "{a} {b} {c}",
         "{a} & {b}",
-        "{a} over {b}",
-        "{a} never {b}",
+        "{a} Over {b}",
+        "{a} Before {b}",
     ]
 
     phrases: list[str] = []
@@ -284,25 +325,28 @@ def _build_random_phrase_samples(count: int) -> list[str]:
     return phrases
 
 
-def _build_generation_options() -> dict[str, Any]:
-    niche_file = SPREADSHEETS_DIR / "niches_front_b.xlsx"
-    design_b_file = SPREADSHEETS_DIR / "designs_front_b.xlsx"
+_FITNESS_PHRASES = [
+    "WOD Now. Wine Later.",
+    "Burpees Don't Like You Either",
+    "Sore Today. Strong Tomorrow.",
+    "I Don't Listen to Rap. I AMRAP.",
+    "If the Bar Ain't Bending, You're Just Pretending",
+    "Dad WOD",
+    "Girls Who Lift",
+    "May the WODs Be Ever in Your Favor",
+    "Buck Furpees",
+    "No Rep, Bro",
+]
 
-    niches = _unique_values_from_sheet(niche_file, "Niches", "Niche")
-    sub_niches = _unique_values_from_sheet(niche_file, "Niches", "Sub-Niche")
-    phrases = _get_phrase_bank()
-    if not phrases:
-        phrases = _unique_values_from_sheet(design_b_file, "Designs", "Phrase / Concept")
-    if not phrases:
-        phrases = _build_random_phrase_samples(50)
+
+def _build_generation_options() -> dict[str, Any]:
+    phrases = list(_FITNESS_PHRASES)
 
     return {
         "sneaker": {
             "dropIds": _get_drop_ids(),
         },
         "general": {
-            "niches": niches,
-            "subNiches": sub_niches,
             "phrases": phrases[:200],
         },
     }
@@ -339,6 +383,26 @@ def _ensure_db() -> None:
             con.commit()
         except sqlite3.OperationalError:
             pass  # Column already exists
+    with sqlite3.connect(DB_PATH) as con:
+        con.execute(
+            """
+            CREATE TABLE IF NOT EXISTS prepare_images (
+                id TEXT PRIMARY KEY,
+                original_filename TEXT NOT NULL,
+                stored_filename TEXT NOT NULL,
+                status TEXT NOT NULL,
+                error_message TEXT,
+                original_width INTEGER,
+                original_height INTEGER,
+                processed_width INTEGER,
+                processed_height INTEGER,
+                created_at TEXT NOT NULL,
+                processed_at TEXT,
+                published_at TEXT
+            )
+            """
+        )
+        con.commit()
 
 
 @contextmanager
@@ -781,6 +845,8 @@ def _run_generation_job(job_id: str, payload: GenerationRequest) -> None:
             selected_render = "gpt_image"
         elif visual == "graphic_gpt_image":
             selected_render = "gpt_image_graphic"
+        elif visual == "mascot_gpt_image":
+            selected_render = "mascot_gpt_image"
         else:
             selected_render = "hf"
 
@@ -796,29 +862,22 @@ def _run_generation_job(job_id: str, payload: GenerationRequest) -> None:
                 temp_phrase_file.write_text(payload.phrase + "\n", encoding="utf-8")
                 command.extend(["--phrases", str(temp_phrase_file)])
             else:
-                # Auto-generate phrase batch when no phrase provided
+                # Pick from curated fitness phrases when no phrase provided
                 phrase_count = desired_count if desired_count > 0 else 8
-                phrases = _build_random_phrase_samples(phrase_count)
+                phrases = random.sample(_FITNESS_PHRASES, k=min(phrase_count, len(_FITNESS_PHRASES)))
                 temp_phrase_file = Path(tempfile.gettempdir()) / f"pod_phrase_{uuid.uuid4().hex}.csv"
                 temp_phrase_file.write_text("\n".join(phrases) + "\n", encoding="utf-8")
                 command.extend(["--phrases", str(temp_phrase_file)])
 
-            opts = _build_generation_options().get("general", {})
-            if payload.niche:
-                command.extend(["--niche", payload.niche])
-            else:
-                command.extend(["--niche", random.choice(opts.get("niches") or ["General"])])
-            if payload.subNiche:
-                command.extend(["--sub-niche", payload.subNiche])
-            else:
-                command.extend(["--sub-niche", random.choice(opts.get("subNiches") or ["General"])])
+            command.extend(["--niche", "Functional Fitness"])
+            command.extend(["--sub-niche", payload.subNiche or "Humor"])
 
         if desired_count > 0:
             command.extend(["--count", str(desired_count)])
         command.extend(["--render", selected_render])
         if visual == "graphic_text":
             command.extend(["--text-renderer", "ideogram"])
-        elif visual in ("graphic_only", "graphic_openai", "graphic_gpt_image"):
+        elif visual in ("graphic_only", "graphic_openai", "graphic_gpt_image", "mascot_gpt_image"):
             command.append("--no-text-overlay")
         if payload.openaiHd:
             command.append("--openai-hd")
@@ -826,6 +885,12 @@ def _run_generation_job(job_id: str, payload: GenerationRequest) -> None:
             command.extend(["--gpt-quality", payload.gptQuality])
         if payload.promptHint:
             command.extend(["--prompt-hint", payload.promptHint])
+        if visual == "mascot_gpt_image" and payload.mascotExpression:
+            command.extend(["--mascot-expression", payload.mascotExpression])
+        if visual == "mascot_gpt_image" and payload.mascotMatchColorway:
+            command.append("--mascot-match-colorway")
+        if payload.phraseVisibilityMode:
+            command.extend(["--phrase-visibility-mode", payload.phraseVisibilityMode])
         if payload.skipApi:
             command.append("--skip-api")
 
@@ -1072,6 +1137,8 @@ def _run_variant_job(job_id: str, payload: VariantRequest) -> None:
             selected_render = "gpt_image"
         elif visual == "graphic_gpt_image":
             selected_render = "gpt_image_graphic"
+        elif visual == "mascot_gpt_image":
+            selected_render = "mascot_gpt_image"
         else:
             selected_render = "hf"
 
@@ -1086,7 +1153,7 @@ def _run_variant_job(job_id: str, payload: VariantRequest) -> None:
         command.extend(["--render", selected_render])
         if visual == "graphic_text":
             command.extend(["--text-renderer", "ideogram"])
-        elif visual in ("graphic_only", "graphic_openai", "graphic_gpt_image"):
+        elif visual in ("graphic_only", "graphic_openai", "graphic_gpt_image", "mascot_gpt_image"):
             command.append("--no-text-overlay")
         if payload.openaiHd:
             command.append("--openai-hd")
@@ -1094,6 +1161,12 @@ def _run_variant_job(job_id: str, payload: VariantRequest) -> None:
             command.extend(["--gpt-quality", payload.gptQuality])
         if payload.promptHint:
             command.extend(["--prompt-hint", payload.promptHint])
+        if visual == "mascot_gpt_image" and payload.mascotExpression:
+            command.extend(["--mascot-expression", payload.mascotExpression])
+        if visual == "mascot_gpt_image" and payload.mascotMatchColorway:
+            command.append("--mascot-match-colorway")
+        if payload.phraseVisibilityMode:
+            command.extend(["--phrase-visibility-mode", payload.phraseVisibilityMode])
         if payload.skipApi:
             command.append("--skip-api")
 
@@ -1455,9 +1528,24 @@ def printify_upload(payload: PrintifyUploadRequest) -> dict[str, Any]:
         front_cfg = PRINTIFY_CONFIG[front_code]
         pcfg = front_cfg["products"][payload.productType]
 
-    base_name = filepath.stem.replace("_", " ").title()
-    title = pcfg["title_template"].format(name=base_name)
-    description = pcfg["description_template"]
+    # For custom designs, strip the UUID prefix (e.g. "861cbc91ad0e_mascot.png" -> "mascot.png")
+    display_filename = filepath.name
+    if payload.designType == "custom":
+        display_filename = re.sub(r"^[0-9a-f]{12}_", "", display_filename)
+    if _PRINTIFY_AVAILABLE:
+        base_name = printify_display_name_from_filename(display_filename, str(filepath.parent))
+    else:
+        base_name = Path(display_filename).stem.replace("_", " ").title()
+    if _PRINTIFY_AVAILABLE:
+        title, description, _, _ = printify_build_listing_copy(
+            front_code,
+            payload.productType,
+            base_name,
+            pcfg,
+        )
+    else:
+        title = pcfg["title_template"].format(name=base_name)
+        description = pcfg["description_template"]
 
     try:
         adapter = PROVIDER_REGISTRY.get_adapter(payload.provider)
@@ -1539,40 +1627,41 @@ def printify_upload(payload: PrintifyUploadRequest) -> dict[str, Any]:
             except Exception:
                 pass  # Non-critical — section can be assigned manually
 
-    try:
-        printify_update_spreadsheet_ids(
-            str(cfg["spreadsheet"]),
-            "Designs",
-            payload.filename,
-            image_id=image_id,
-            product_id=product_id,
-            etsy_id=etsy_listing_id,
-            status=status,
-        )
-        _update_upload_metadata(
-            cfg["spreadsheet"],
-            payload.filename,
-            provider=payload.provider,
-            market=payload.market,
-        )
-    except Exception as exc:
-        # Product was uploaded successfully, just spreadsheet update failed — still return success
-        return {
-            "filename": payload.filename,
-            "imageId": image_id,
-            "productId": product_id,
-            "printifyUrl": printify_url,
-            "providerUrl": printify_url,
-            "etsyListingId": etsy_listing_id,
-            "etsyUrl": etsy_url,
-            "etsySyncPending": not payload.draft and etsy_listing_id is None,
-            "etsySection": etsy_section if not payload.draft else None,
-            "status": status,
-            "provider": payload.provider,
-            "market": payload.market,
-            "etsySyncError": etsy_sync_error,
-            "warning": f"Spreadsheet update failed: {exc}",
-        }
+    if cfg["spreadsheet"] is not None:
+        try:
+            printify_update_spreadsheet_ids(
+                str(cfg["spreadsheet"]),
+                "Designs",
+                payload.filename,
+                image_id=image_id,
+                product_id=product_id,
+                etsy_id=etsy_listing_id,
+                status=status,
+            )
+            _update_upload_metadata(
+                cfg["spreadsheet"],
+                payload.filename,
+                provider=payload.provider,
+                market=payload.market,
+            )
+        except Exception as exc:
+            # Product was uploaded successfully, just spreadsheet update failed — still return success
+            return {
+                "filename": payload.filename,
+                "imageId": image_id,
+                "productId": product_id,
+                "printifyUrl": printify_url,
+                "providerUrl": printify_url,
+                "etsyListingId": etsy_listing_id,
+                "etsyUrl": etsy_url,
+                "etsySyncPending": not payload.draft and etsy_listing_id is None,
+                "etsySection": etsy_section if not payload.draft else None,
+                "status": status,
+                "provider": payload.provider,
+                "market": payload.market,
+                "etsySyncError": etsy_sync_error,
+                "warning": f"Spreadsheet update failed: {exc}",
+            }
 
     return {
         "filename": payload.filename,
@@ -1589,6 +1678,255 @@ def printify_upload(payload: PrintifyUploadRequest) -> dict[str, Any]:
         "market": payload.market,
         "etsySyncError": etsy_sync_error,
     }
+
+
+# ── Prepare: upload, process, publish custom images ────────────────────
+
+
+@app.post("/api/prepare/upload")
+async def prepare_upload(
+    files: list[UploadFile] = File(...),
+) -> dict[str, Any]:
+    from PIL import Image as PILImage
+
+    PREPARE_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    uploaded: list[dict[str, Any]] = []
+
+    for f in files:
+        ext = os.path.splitext(f.filename or "file.png")[1].lower()
+        if ext not in (".png", ".jpg", ".jpeg"):
+            continue
+
+        img_id = uuid.uuid4().hex[:12]
+        safe_name = re.sub(r"[^\w.\-]", "_", os.path.splitext(f.filename or "image")[0])
+        stored_name = f"{img_id}_{safe_name}.png"
+        dest = PREPARE_UPLOADS_DIR / stored_name
+
+        data = await f.read()
+        # Convert to RGBA PNG regardless of input format
+        import io
+        img = PILImage.open(io.BytesIO(data)).convert("RGBA")
+        img.save(str(dest), "PNG")
+        w, h = img.size
+
+        with _db() as con:
+            con.execute(
+                "INSERT INTO prepare_images (id, original_filename, stored_filename, status, original_width, original_height, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (img_id, f.filename, stored_name, "uploaded", w, h, _now_iso()),
+            )
+            con.commit()
+
+        uploaded.append({
+            "id": img_id,
+            "originalFilename": f.filename,
+            "storedFilename": stored_name,
+            "status": "uploaded",
+            "width": w,
+            "height": h,
+        })
+
+    return {"uploaded": uploaded, "count": len(uploaded)}
+
+
+@app.post("/api/prepare/process")
+def start_prepare_processing(payload: PrepareProcessRequest) -> dict[str, Any]:
+    if not payload.image_ids:
+        raise HTTPException(status_code=400, detail="No image IDs provided")
+
+    job_id = uuid.uuid4().hex[:12]
+    with _db() as con:
+        con.execute(
+            "INSERT INTO jobs (id, kind, design_type, mode, status, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (job_id, "prepare", "custom", "batch", "queued", json.dumps({"image_ids": payload.image_ids}), _now_iso()),
+        )
+        con.commit()
+
+    t = threading.Thread(target=_run_prepare_job, args=(job_id, payload.image_ids), daemon=True)
+    t.start()
+
+    return {"jobId": job_id, "status": "queued", "imageCount": len(payload.image_ids)}
+
+
+def _run_prepare_job(job_id: str, image_ids: list[str]) -> None:
+    _update_job(job_id, status="running", started_at=_now_iso())
+    output_lines: list[str] = []
+
+    try:
+        from design_pipeline import remove_chroma_bg, remove_background
+        from inspect_designs import trim_and_fill
+    except ImportError as exc:
+        _update_job(job_id, status="failed", finished_at=_now_iso(), output=f"Import error: {exc}")
+        return
+
+    PREPARE_PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+    processed_files: list[str] = []
+
+    for i, img_id in enumerate(image_ids):
+        with _db() as con:
+            row = con.execute("SELECT stored_filename FROM prepare_images WHERE id=?", (img_id,)).fetchone()
+        if not row:
+            output_lines.append(f"[{i+1}/{len(image_ids)}] {img_id}: not found, skipping")
+            continue
+
+        stored_filename = row[0]
+        src = PREPARE_UPLOADS_DIR / stored_filename
+        dst = PREPARE_PROCESSED_DIR / stored_filename
+
+        if not src.exists():
+            output_lines.append(f"[{i+1}/{len(image_ids)}] {stored_filename}: source file missing")
+            with _db() as con:
+                con.execute("UPDATE prepare_images SET status='failed', error_message='Source file missing' WHERE id=?", (img_id,))
+                con.commit()
+            continue
+
+        # Mark as processing
+        with _db() as con:
+            con.execute("UPDATE prepare_images SET status='processing' WHERE id=?", (img_id,))
+            con.commit()
+
+        try:
+            shutil.copy2(str(src), str(dst))
+
+            # Check if image already has significant transparency
+            from PIL import Image as PILImage
+            import numpy as np
+            img = PILImage.open(str(dst)).convert("RGBA")
+            arr = np.array(img)
+            transparent_pct = (arr[:, :, 3] < 128).sum() / (img.width * img.height) * 100
+
+            if transparent_pct < 10:
+                # Try chroma bg removal first
+                removed_pct = remove_chroma_bg(str(dst), tolerance=80)
+                if removed_pct < 5:
+                    # Fallback to white flood-fill
+                    remove_background(str(dst), tolerance=20)
+                    output_lines.append(f"[{i+1}/{len(image_ids)}] {stored_filename}: white bg removal (fallback)")
+                else:
+                    output_lines.append(f"[{i+1}/{len(image_ids)}] {stored_filename}: chroma bg removed ({removed_pct:.0f}%)")
+            else:
+                output_lines.append(f"[{i+1}/{len(image_ids)}] {stored_filename}: already transparent ({transparent_pct:.0f}%), skipping bg removal")
+
+            # Trim and scale to 4500x5400
+            trim_and_fill(str(dst), 4500, 5400, 0.05)
+
+            # Get final dimensions
+            final_img = PILImage.open(str(dst))
+            fw, fh = final_img.size
+
+            with _db() as con:
+                con.execute(
+                    "UPDATE prepare_images SET status='processed', processed_width=?, processed_height=?, processed_at=? WHERE id=?",
+                    (fw, fh, _now_iso(), img_id),
+                )
+                con.commit()
+            processed_files.append(stored_filename)
+            output_lines.append(f"  -> {fw}x{fh} (processed)")
+
+        except Exception as exc:
+            output_lines.append(f"[{i+1}/{len(image_ids)}] {stored_filename}: FAILED - {exc}")
+            with _db() as con:
+                con.execute("UPDATE prepare_images SET status='failed', error_message=? WHERE id=?", (str(exc), img_id))
+                con.commit()
+
+    output = "\n".join(output_lines)
+    _update_job(
+        job_id,
+        status="success",
+        finished_at=_now_iso(),
+        output=output,
+        generated_files=json.dumps(processed_files),
+    )
+
+
+@app.get("/api/prepare/images")
+def list_prepare_images(
+    status: str = Query(default="all"),
+) -> dict[str, Any]:
+    with _db() as con:
+        if status == "all":
+            rows = con.execute("SELECT * FROM prepare_images ORDER BY created_at DESC").fetchall()
+        else:
+            rows = con.execute("SELECT * FROM prepare_images WHERE status=? ORDER BY created_at DESC", (status,)).fetchall()
+    cols = ["id", "original_filename", "stored_filename", "status", "error_message",
+            "original_width", "original_height", "processed_width", "processed_height",
+            "created_at", "processed_at", "published_at"]
+    items = [dict(zip(cols, row)) for row in rows]
+    return {"images": items}
+
+
+@app.get("/api/prepare/image")
+def get_prepare_image(
+    id: str = Query(...),
+    version: Literal["original", "processed"] = Query(default="original"),
+):
+    with _db() as con:
+        row = con.execute("SELECT stored_filename, status FROM prepare_images WHERE id=?", (id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    stored_filename, img_status = row
+    if version == "processed":
+        path = PREPARE_PROCESSED_DIR / stored_filename
+    else:
+        path = PREPARE_UPLOADS_DIR / stored_filename
+
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"{version} image file not found")
+    return FileResponse(str(path), media_type="image/png")
+
+
+@app.post("/api/prepare/publish")
+def publish_prepared_image(payload: PreparePublishRequest) -> dict[str, Any]:
+    with _db() as con:
+        row = con.execute("SELECT stored_filename, status FROM prepare_images WHERE id=?", (payload.image_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    stored_filename, status = row
+    if status not in ("processed", "published"):
+        raise HTTPException(status_code=400, detail=f"Image must be processed first (current status: {status})")
+
+    src = PREPARE_PROCESSED_DIR / stored_filename
+    if not src.exists():
+        raise HTTPException(status_code=404, detail="Processed image file not found")
+
+    approved_dir = FRONT_CONFIG["custom"]["approved_folder"]
+    approved_dir.mkdir(parents=True, exist_ok=True)
+    dst = approved_dir / stored_filename
+    shutil.copy2(str(src), str(dst))
+
+    with _db() as con:
+        con.execute(
+            "UPDATE prepare_images SET status='published', published_at=? WHERE id=?",
+            (_now_iso(), payload.image_id),
+        )
+        con.commit()
+
+    return {"id": payload.image_id, "filename": stored_filename, "status": "published"}
+
+
+@app.delete("/api/prepare/image/{image_id}")
+def delete_prepare_image(image_id: str) -> dict[str, Any]:
+    with _db() as con:
+        row = con.execute("SELECT stored_filename FROM prepare_images WHERE id=?", (image_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    stored_filename = row[0]
+    for folder in (PREPARE_UPLOADS_DIR, PREPARE_PROCESSED_DIR):
+        p = folder / stored_filename
+        if p.exists():
+            p.unlink()
+    # Also remove from front_custom/approved if published
+    approved = FRONT_CONFIG["custom"]["approved_folder"] / stored_filename
+    if approved.exists():
+        approved.unlink()
+
+    with _db() as con:
+        con.execute("DELETE FROM prepare_images WHERE id=?", (image_id,))
+        con.commit()
+
+    return {"deleted": image_id}
 
 
 # ── Desktop mode: serve the built React frontend ──────────────────────

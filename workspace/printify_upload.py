@@ -21,10 +21,12 @@ Setup:
 """
 
 import base64
+import glob
 import os
 import sys
 import time
 import json
+import re
 import argparse
 import requests
 from openpyxl import load_workbook
@@ -41,6 +43,13 @@ BASE    = "https://api.printify.com/v1"
 
 WORKSPACE = os.path.dirname(os.path.abspath(__file__))
 SP = os.path.join(WORKSPACE, "spreadsheets")
+
+LISTING_LIMITS = {
+    "title_max": 140,
+    "description_max": 2800,
+    "tag_max_count": 13,
+    "tag_max_length": 20,
+}
 
 # ── Per-front product configuration ──────────────────────────────
 # Update blueprint_id, provider_id, variant_ids after querying the
@@ -128,24 +137,10 @@ FRONT_CONFIG = {
                     "graphic tee for him",    # 19
                 ],
                 "title_template": (
-                    "{name} Sneakerhead Shirt | Sneaker Culture Graphic Tee "
-                    "| RotationClub | Gift for Sneaker Collector "
-                    "| Streetwear Tee"
+                    "{name} Sneakerhead Shirt | Sneaker Culture Tee "
+                    "| Streetwear Graphic Tee | Gift for Sneaker Collector"
                 ),
-                "description_template": (
-                    "RotationClub -- sneaker culture apparel for "
-                    "collectors, sneakerheads, and streetwear fans.\n\n"
-                    "This graphic tee celebrates sneaker culture and "
-                    "collector life. Designed for the daily rotation "
-                    "and the deadstock shelf alike.\n\n"
-                    "DETAILS:\n"
-                    "* Soft, lightweight ring-spun cotton (Bella+Canvas 3001)\n"
-                    "* DTG printed -- vibrant, wash-resistant graphics\n"
-                    "* Unisex fit -- true to size\n"
-                    "* Available in Black and White, S through 5XL\n\n"
-                    "Perfect gift for sneakerheads, sneaker collectors, "
-                    "and streetwear fans. Welcome to the club."
-                ),
+                "description_template": "",
             },
             "hoodie": {
                 **_HOODIE_PRODUCT,
@@ -165,25 +160,10 @@ FRONT_CONFIG = {
                     "graphic hoodie",          # 14
                 ],
                 "title_template": (
-                    "{name} Sneakerhead Hoodie | Sneaker Culture Graphic Hoodie "
-                    "| RotationClub | Gift for Sneaker Collector "
-                    "| Streetwear Hoodie"
+                    "{name} Sneakerhead Hoodie | Sneaker Culture Hoodie "
+                    "| Streetwear Graphic Hoodie | Gift for Sneaker Collector"
                 ),
-                "description_template": (
-                    "RotationClub -- sneaker culture apparel for "
-                    "collectors, sneakerheads, and streetwear fans.\n\n"
-                    "This graphic hoodie celebrates sneaker culture and "
-                    "collector life. Designed for the daily rotation "
-                    "and the deadstock shelf alike.\n\n"
-                    "DETAILS:\n"
-                    "* Premium heavyweight fleece blend (Gildan 18500)\n"
-                    "* DTG printed -- vibrant, wash-resistant graphics\n"
-                    "* Oversized streetwear fit -- size up for "
-                    "drop-shoulder silhouette\n"
-                    "* Available in Black and White, S through 5XL\n\n"
-                    "Perfect gift for sneakerheads, sneaker collectors, "
-                    "and streetwear fans. Welcome to the club."
-                ),
+                "description_template": "",
             },
         },
     },
@@ -195,75 +175,356 @@ FRONT_CONFIG = {
             "tshirt": {
                 **_TSHIRT_PRODUCT,
                 "tags": [
-                    "graphic tee men",        # 15
-                    "unique gift shirt",       # 17
-                    "funny quote tee",         # 15
-                    "trendy graphic tee",      # 18
-                    "minimalist tee",          # 14
-                    "gift for boyfriend",      # 18
-                    "cool statement tee",      # 18
-                    "unisex graphic tee",      # 18
-                    "birthday gift him",       # 17
-                    "casual everyday tee",     # 19
-                    "aesthetic shirt",          # 15
-                    "gift best friend",        # 16
-                    "sarcastic quote tee",     # 19
+                    "workout shirt",           # 13
+                    "gym shirt",               # 9
+                    "fitness gift",            # 12
+                    "funny gym shirt",         # 15
+                    "weightlifting tee",       # 17
+                    "WOD shirt",               # 9
+                    "lifting shirt",           # 13
+                    "functional fitness",      # 19
+                    "gym humor",               # 9
+                    "barbell shirt",           # 13
+                    "exercise shirt",          # 14
+                    "gym lover gift",          # 14
+                    "fitness tshirt",          # 14
                 ],
                 "title_template": (
-                    "{name} Graphic Tee | Unique Gift for Him "
-                    "| Funny Quote Shirt | Trendy Unisex Tee"
+                    "{name} Workout Shirt | Funny Gym Tee "
+                    "| WOD Fitness Gift | Unisex Graphic Tee"
                 ),
                 "description_template": (
-                    "A unique graphic tee perfect as a gift or for "
-                    "everyday wear.\n\n"
+                    "A graphic tee for anyone who lives for the WOD. "
+                    "Whether you're chasing PRs or surviving burpees, "
+                    "this shirt says it all.\n\n"
                     "DETAILS:\n"
                     "* Soft, lightweight ring-spun cotton (Bella+Canvas 3001)\n"
                     "* DTG printed -- vibrant, wash-resistant graphics\n"
                     "* Unisex fit -- true to size\n"
                     "* Available in Black and White, S through 5XL\n\n"
-                    "Makes a great birthday gift, holiday gift, "
-                    "or just-because gift for anyone who loves "
-                    "bold graphic tees."
+                    "Great gift for gym lovers, lifters, and anyone "
+                    "who knows what AMRAP means."
                 ),
             },
             "hoodie": {
                 **_HOODIE_PRODUCT,
                 "tags": [
-                    "graphic hoodie men",      # 18
-                    "unique gift hoodie",       # 18
-                    "funny quote hoodie",       # 18
-                    "trendy hoodie",            # 13
-                    "minimalist hoodie",        # 17
-                    "gift for boyfriend",       # 18
-                    "cool statement hood",      # 19
-                    "unisex hoodie",            # 13
-                    "birthday gift him",        # 17
-                    "casual hoodie",            # 13
-                    "aesthetic hoodie",          # 16
-                    "gift best friend",         # 16
-                    "sarcastic hoodie",         # 16
+                    "workout hoodie",          # 14
+                    "gym hoodie",              # 10
+                    "fitness gift",            # 12
+                    "funny gym hoodie",        # 16
+                    "weightlifting hood",      # 18
+                    "WOD hoodie",              # 10
+                    "lifting hoodie",          # 14
+                    "functional fitness",      # 19
+                    "gym humor",               # 9
+                    "barbell hoodie",          # 14
+                    "exercise hoodie",         # 15
+                    "gym lover gift",          # 14
+                    "fitness hoodie",          # 14
                 ],
                 "title_template": (
-                    "{name} Graphic Hoodie | Unique Gift for Him "
-                    "| Funny Quote Hoodie | Trendy Unisex Hoodie"
+                    "{name} Workout Hoodie | Funny Gym Hoodie "
+                    "| WOD Fitness Gift | Unisex Graphic Hoodie"
                 ),
                 "description_template": (
-                    "A unique graphic hoodie perfect as a gift or for "
-                    "everyday wear.\n\n"
+                    "A graphic hoodie for anyone who lives for the WOD. "
+                    "Whether you're chasing PRs or surviving burpees, "
+                    "this hoodie says it all.\n\n"
                     "DETAILS:\n"
                     "* Premium heavyweight fleece blend (Gildan 18500)\n"
                     "* DTG printed -- vibrant, wash-resistant graphics\n"
                     "* Oversized fit -- size up for drop-shoulder "
                     "silhouette\n"
                     "* Available in Black and White, S through 5XL\n\n"
-                    "Makes a great birthday gift, holiday gift, "
-                    "or just-because gift for anyone who loves "
-                    "bold graphic hoodies."
+                    "Great gift for gym lovers, lifters, and anyone "
+                    "who knows what AMRAP means."
+                ),
+            },
+        },
+    },
+    "C": {
+        "designs_dir":  os.path.join(WORKSPACE, "front_custom", "approved"),
+        "spreadsheet":  None,
+        "sheet_name":   None,
+        "products": {
+            "tshirt": {
+                **_TSHIRT_PRODUCT,
+                "tags": [
+                    "graphic tee",
+                    "custom design tee",
+                    "unisex graphic shirt",
+                    "streetwear tee",
+                    "trendy graphic tee",
+                    "cool shirt for him",
+                    "cool shirt for her",
+                    "unique graphic tee",
+                    "art tee shirt",
+                    "pop culture tee",
+                    "graphic tee gift",
+                    "funny graphic tee",
+                    "statement tee",
+                ],
+                "title_template": (
+                    "{name} Graphic Tee | Unisex Graphic T-Shirt "
+                    "| Cool Graphic Tee | Unique Design Shirt"
+                ),
+                "description_template": (
+                    "A bold graphic tee featuring a unique custom design. "
+                    "Stand out from the crowd with this statement piece.\n\n"
+                    "DETAILS:\n"
+                    "* Premium soft cotton (Bella+Canvas 3001)\n"
+                    "* DTG printed -- vibrant, wash-resistant graphics\n"
+                    "* True-to-size unisex fit\n"
+                    "* Available in Black and White, S through 4XL"
+                ),
+            },
+            "hoodie": {
+                **_HOODIE_PRODUCT,
+                "tags": [
+                    "graphic hoodie",
+                    "custom design hoodie",
+                    "unisex hoodie",
+                    "streetwear hoodie",
+                    "trendy hoodie",
+                    "cool hoodie for him",
+                    "cool hoodie for her",
+                    "unique graphic hoodie",
+                    "art hoodie",
+                    "pop culture hoodie",
+                    "graphic hoodie gift",
+                    "funny graphic hoodie",
+                    "statement hoodie",
+                ],
+                "title_template": (
+                    "{name} Graphic Hoodie | Unisex Graphic Hoodie "
+                    "| Cool Graphic Hoodie | Unique Design Hoodie"
+                ),
+                "description_template": (
+                    "A bold graphic hoodie featuring a unique custom design. "
+                    "Stand out from the crowd with this statement piece.\n\n"
+                    "DETAILS:\n"
+                    "* Premium heavyweight fleece blend (Gildan 18500)\n"
+                    "* DTG printed -- vibrant, wash-resistant graphics\n"
+                    "* Oversized fit -- size up for drop-shoulder silhouette\n"
+                    "* Available in Black and White, S through 5XL"
                 ),
             },
         },
     },
 }
+
+
+def _normalize_spaces(value):
+    return re.sub(r"\s+", " ", value or "").strip()
+
+
+def _load_design_metadata_index():
+    metadata = {}
+    for path in sorted(glob.glob(os.path.join(WORKSPACE, "logs", "front_*.json"))):
+        try:
+            payload = json.loads(open(path, "r", encoding="utf-8").read())
+        except Exception:
+            continue
+        rows = payload if isinstance(payload, list) else [payload]
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            filename = row.get("filename")
+            if not filename:
+                continue
+            metadata[filename] = {
+                "style": row.get("style"),
+                "color_palette": row.get("color_palette"),
+                "generation_model": row.get("generation_model"),
+            }
+    return metadata
+
+
+def _variant_label_from_palette(palette):
+    if not palette:
+        return None
+    descriptor = palette.split(",", 1)[1].strip() if "," in palette else palette.strip()
+    descriptor = re.sub(r"\b(aesthetic|finish|warmth|look)\b", "", descriptor, flags=re.IGNORECASE)
+    descriptor = _normalize_spaces(descriptor)
+    if not descriptor:
+        return None
+    words = descriptor.split()
+    return " ".join(words[:3]).title()
+
+
+def _variant_label_from_style(style):
+    if not style:
+        return None
+    normalized = style.replace("+", " ")
+    normalized = re.sub(r"\b(text|graphic|letters|lettering|typography|layout)\b", "", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"[^a-zA-Z0-9 ]+", " ", normalized)
+    normalized = _normalize_spaces(normalized)
+    if not normalized:
+        return None
+    words = normalized.split()
+    return " ".join(words[:3]).title()
+
+
+def _number_to_edition_word(value):
+    words = {
+        0: "Zero",
+        1: "One",
+        2: "Two",
+        3: "Three",
+        4: "Four",
+        5: "Five",
+        6: "Six",
+        7: "Seven",
+        8: "Eight",
+        9: "Nine",
+        10: "Ten",
+        11: "Eleven",
+        12: "Twelve",
+        13: "Thirteen",
+        14: "Fourteen",
+        15: "Fifteen",
+        16: "Sixteen",
+        17: "Seventeen",
+        18: "Eighteen",
+        19: "Nineteen",
+        20: "Twenty",
+    }
+    return words.get(value, str(value))
+
+
+def _has_duplicate_base_name(base_stem, directory):
+    if not directory or not os.path.isdir(directory):
+        return False
+    pattern = re.compile(rf"^{re.escape(base_stem)}_\d+\.png$", re.IGNORECASE)
+    matches = [name for name in os.listdir(directory) if pattern.match(name)]
+    return len(matches) > 1
+
+
+def display_name_from_filename(filename, directory=None):
+    file_name = os.path.basename(filename)
+    stem = os.path.splitext(file_name)[0]
+    base_stem = re.sub(r"_\d+$", "", stem)
+    base_name = base_stem.replace("_", " ").title()
+
+    if not _has_duplicate_base_name(base_stem, directory):
+        return base_name
+
+    metadata = _load_design_metadata_index().get(file_name, {})
+    variant_label = _variant_label_from_palette(metadata.get("color_palette"))
+    if not variant_label:
+        variant_label = _variant_label_from_style(metadata.get("style"))
+    if not variant_label:
+        suffix_match = re.search(r"_(\d+)$", stem)
+        if suffix_match:
+            variant_label = f"Edition {_number_to_edition_word(int(suffix_match.group(1)))}"
+
+    if variant_label:
+        return f"{base_name} {variant_label}"
+    return base_name
+
+
+def _clip_text(value, max_length):
+    value = (value or "").strip()
+    if len(value) <= max_length:
+        return value
+
+    clipped = value[: max_length + 1].rsplit(" ", 1)[0].rstrip(" ,;:-|/")
+    if clipped and len(clipped) >= int(max_length * 0.6):
+        return clipped
+    return value[:max_length].rstrip(" ,;:-|/")
+
+
+def _normalize_tag(tag):
+    normalized = _normalize_spaces(tag).lower()
+    normalized = normalized.replace("_", " ")
+    return normalized
+
+
+def normalize_listing_content(title, description, tags):
+    warnings = []
+
+    normalized_title = _clip_text(_normalize_spaces(title), LISTING_LIMITS["title_max"])
+    if len(normalized_title) < len((title or "").strip()):
+        warnings.append(
+            f"title trimmed to {LISTING_LIMITS['title_max']} chars"
+        )
+
+    description = (description or "").strip()
+    normalized_description = _clip_text(description, LISTING_LIMITS["description_max"])
+    if len(normalized_description) < len(description):
+        warnings.append(
+            f"description trimmed to {LISTING_LIMITS['description_max']} chars"
+        )
+
+    normalized_tags = []
+    seen = set()
+    for tag in tags or []:
+        candidate = _clip_text(_normalize_tag(tag), LISTING_LIMITS["tag_max_length"])
+        if not candidate or candidate in seen:
+            continue
+        seen.add(candidate)
+        normalized_tags.append(candidate)
+
+    if len(normalized_tags) > LISTING_LIMITS["tag_max_count"]:
+        warnings.append(
+            f"tags trimmed to {LISTING_LIMITS['tag_max_count']} entries"
+        )
+    normalized_tags = normalized_tags[: LISTING_LIMITS["tag_max_count"]]
+
+    return normalized_title, normalized_description, normalized_tags, warnings
+
+
+def build_front_a_description(design_name, product_type):
+    if product_type == "hoodie":
+        intro = (
+            f"{design_name} is a sneakerhead hoodie and sneaker culture graphic hoodie made for sneaker collectors, sneakerheads, and streetwear fans."
+        )
+        body = (
+            "This streetwear graphic hoodie works as an everyday hoodie for sneaker lovers, hypebeasts, and collectors who want sneaker culture clothing that fits the rotation. "
+            "Designed for layered cold-weather fits, casual streetwear outfits, and the deadstock shelf alike."
+        )
+        details = (
+            "DETAILS:\n"
+            "* Premium heavyweight fleece blend (Gildan 18500)\n"
+            "* DTG printed for a clean, durable graphic finish\n"
+            "* Relaxed streetwear fit; size up for a roomier drop-shoulder look\n"
+            "* Available in Black and White, sizes S through 5XL"
+        )
+        close = (
+            "Great gift for a sneaker collector, sneaker lover, hypebeast, or anyone shopping for a graphic hoodie, sneakerhead hoodie, or streetwear hoodie."
+        )
+    else:
+        intro = (
+            f"{design_name} is a sneakerhead shirt and sneaker culture graphic tee made for sneaker collectors, sneakerheads, and streetwear fans."
+        )
+        body = (
+            "This streetwear graphic tee works as an everyday shirt for sneaker lovers and collectors who want sneaker culture clothing that fits casual outfits, weekend rotation days, and daily wear. "
+            "Designed for the daily rotation and the deadstock shelf alike."
+        )
+        details = (
+            "DETAILS:\n"
+            "* Soft, lightweight ring-spun cotton (Bella+Canvas 3001)\n"
+            "* DTG printed for a clean, durable graphic finish\n"
+            "* Unisex fit; true to size with an easy everyday feel\n"
+            "* Available in Black and White, sizes S through 4XL"
+        )
+        close = (
+            "Great gift for a sneaker collector, sneaker lover, or anyone shopping for a graphic tee, sneakerhead shirt, or streetwear graphic tee."
+        )
+
+    return f"{intro}\n\n{body}\n\n{details}\n\n{close}"
+
+
+def build_listing_copy(front, product_type, design_name, cfg):
+    raw_title = cfg["title_template"].format(name=design_name)
+    if front == "A":
+        raw_description = build_front_a_description(design_name, product_type)
+    else:
+        raw_description = cfg["description_template"]
+
+    raw_tags = build_product_tags(cfg, design_name=design_name, product_type=product_type)
+    return normalize_listing_content(raw_title, raw_description, raw_tags)
 
 
 def check_config():
@@ -299,19 +560,24 @@ def calc_price(cost_cents, shipping_cents):
 
 
 def build_product_tags(cfg, design_name=None, product_type=None):
-    """Build tags: base tags + dynamic from design name, capped at 13 (Etsy max)."""
+    """Build tags: dynamic from design name first, then base tags, capped at 13 (Etsy max)."""
     base_tags = list(cfg.get("tags", []))
+    dynamic = []
     if design_name:
         name_lower = design_name.lower().strip()
-        dynamic = [name_lower]
+        dynamic.append(name_lower)
         first_word = name_lower.split()[0] if name_lower.split() else None
         if first_word:
             suffix = "hoodie" if product_type == "hoodie" else "tee"
             dynamic.append(f"{first_word} {suffix}")
-        for tag in dynamic:
-            if tag not in base_tags:
-                base_tags.append(tag)
-    return [t[:20] for t in base_tags[:13]]  # Etsy max 20 chars per tag
+    # Deduplicate: dynamic tags first, then fill with base tags
+    seen = set()
+    merged = []
+    for tag in dynamic + base_tags:
+        if tag not in seen:
+            seen.add(tag)
+            merged.append(tag)
+    return [t[:20] for t in merged[:13]]  # Etsy max 20 chars per tag
 
 
 def ensure_product_tags(product_id, title, description, tags, attempts=3, delay=0.8):
@@ -345,6 +611,7 @@ def create_product(image_id, title, description, cfg, design_name=None):
     """Create a product on Printify with the uploaded image. Returns product ID."""
     product_type = "hoodie" if "hoodie" in title.lower() else "tshirt"
     tags = build_product_tags(cfg, design_name=design_name, product_type=product_type)
+    title, description, tags, _ = normalize_listing_content(title, description, tags)
 
     # Build variants with calculated per-size pricing
     base_cost = cfg["base_cost_cents"]
@@ -481,12 +748,13 @@ def run_upload(front, product_type="tshirt", draft=False, dry_run=False):
     results = []
     for filename in files:
         filepath = os.path.join(designs_dir, filename)
-        base_name = os.path.splitext(filename)[0].replace("_", " ").title()
-        title = pcfg["title_template"].format(name=base_name)
-        desc = pcfg["description_template"]
+        base_name = display_name_from_filename(filename, designs_dir)
+        title, desc, tags, warnings = build_listing_copy(front, product_type, base_name, pcfg)
 
         if dry_run:
             print(f"  [DRY] {filename} -> '{title[:60]}...'")
+            if warnings:
+                print(f"        Warnings: {', '.join(warnings)}")
             continue
 
         try:
@@ -497,6 +765,8 @@ def run_upload(front, product_type="tshirt", draft=False, dry_run=False):
             # Step 2: Create product
             product_id = create_product(image_id, title, desc, pcfg, design_name=base_name)
             print(f"  [2/3] Created product: {product_id}")
+            if warnings:
+                print(f"        Auto-normalized: {', '.join(warnings)}")
 
             # Step 3: Publish (unless draft mode for drops)
             if not draft:
@@ -586,6 +856,7 @@ def sync_etsy_ids(front):
 
 def update_product(product_id, title, description, tags):
     """Update an existing Printify product's title, description, and tags."""
+    title, description, tags, _ = normalize_listing_content(title, description, tags)
     payload = {
         "title": title,
         "description": description,
@@ -640,21 +911,22 @@ def run_update(front, product_type="tshirt", republish=False, dry_run=False):
 
     updated = 0
     for row_num, product_id, filename in rows:
-        base_name = os.path.splitext(filename)[0].replace("_", " ").title()
-        title = pcfg["title_template"].format(name=base_name)
-        desc = pcfg["description_template"]
-
-        tags = build_product_tags(pcfg, design_name=base_name, product_type=product_type)
+        base_name = display_name_from_filename(filename, cfg["designs_dir"])
+        title, desc, tags, warnings = build_listing_copy(front, product_type, base_name, pcfg)
 
         if dry_run:
             print(f"  [DRY] {filename} (id={product_id})")
             print(f"        Title: {title[:70]}...")
             print(f"        Tags:  {', '.join(tags[:5])}... ({len(tags)} total)\n")
+            if warnings:
+                print(f"        Warnings: {', '.join(warnings)}\n")
             continue
 
         try:
             update_product(product_id, title, desc, tags)
             print(f"  [UPD] {filename} (id={product_id}) -- tags: {len(tags)}, title+desc updated")
+            if warnings:
+                print(f"        Auto-normalized: {', '.join(warnings)}")
 
             if republish:
                 publish_product(product_id)

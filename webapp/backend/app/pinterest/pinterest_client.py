@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import os
 from pathlib import Path
 
@@ -24,57 +25,34 @@ def _headers() -> dict[str, str]:
     }
 
 
-async def upload_media(image_path: str) -> str:
-    if not is_configured():
-        raise RuntimeError("Pinterest API not configured")
-
-    async with httpx.AsyncClient(base_url=BASE_URL, timeout=60.0) as client:
-        # Step 1: Register media
-        resp = await client.post(
-            "/media",
-            headers=_headers(),
-            json={"media_type": "image"},
-        )
-        resp.raise_for_status()
-        media_data = resp.json()
-        media_id = media_data["media_id"]
-        upload_url = media_data["upload_url"]
-
-        # Step 2: Upload image binary
-        image_bytes = Path(image_path).read_bytes()
-        upload_resp = await client.put(
-            upload_url,
-            content=image_bytes,
-            headers={"Content-Type": "image/png"},
-        )
-        upload_resp.raise_for_status()
-
-    return media_id
-
-
 async def create_pin(
     board_id: str,
     title: str,
     description: str,
     link: str | None,
-    media_id: str,
+    image_path: str,
 ) -> str:
+    """Create a pin with an inline base64 image (no /media upload needed)."""
     if not is_configured():
         raise RuntimeError("Pinterest API not configured")
+
+    image_bytes = Path(image_path).read_bytes()
+    image_b64 = base64.standard_b64encode(image_bytes).decode("ascii")
 
     payload: dict = {
         "board_id": board_id,
         "title": title,
         "description": description,
         "media_source": {
-            "source_type": "media_id",
-            "media_id": media_id,
+            "source_type": "image_base64",
+            "content_type": "image/png",
+            "data": image_b64,
         },
     }
     if link:
         payload["link"] = link
 
-    async with httpx.AsyncClient(base_url=BASE_URL, timeout=30.0) as client:
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=60.0) as client:
         resp = await client.post("/pins", headers=_headers(), json=payload)
         resp.raise_for_status()
         data = resp.json()

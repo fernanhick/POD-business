@@ -147,6 +147,36 @@ export const api = {
       body: JSON.stringify({ listing_id, section_name }),
     }),
 
+  // Prepare (custom image upload & processing)
+  prepareImages: (status) =>
+    request(`/prepare/images${status && status !== "all" ? `?status=${status}` : ""}`),
+  prepareImageUrl: (id, version = "original") =>
+    `${API_BASE}/prepare/image?id=${encodeURIComponent(id)}&version=${version}`,
+  prepareProcess: (imageIds) =>
+    request("/prepare/process", {
+      method: "POST",
+      body: JSON.stringify({ image_ids: imageIds }),
+    }),
+  preparePublish: (imageId) =>
+    request("/prepare/publish", {
+      method: "POST",
+      body: JSON.stringify({ image_id: imageId }),
+    }),
+  prepareDelete: (id) => request(`/prepare/image/${id}`, { method: "DELETE" }),
+  prepareUpload: async (files) => {
+    const formData = new FormData();
+    for (const file of files) formData.append("files", file);
+    const res = await fetch(`${API_BASE}/prepare/upload`, {
+      method: "POST",
+      body: formData,
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail || `Upload failed: ${res.status}`);
+    }
+    return res.json();
+  },
+
   // Pinterest Setup
   pinterestSetupStatus: () => request("/pinterest/setup/status"),
   pinterestSaveCredentials: (app_id, app_secret) =>

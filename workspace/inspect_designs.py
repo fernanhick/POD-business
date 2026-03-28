@@ -17,13 +17,14 @@ import sys
 import json
 import shutil
 import argparse
-from PIL import Image, ImageStat, ImageDraw, ImageFont
+from PIL import Image, ImageStat, ImageDraw, ImageFont, ImageChops
 
 # ── Quality thresholds (match Printify requirements) ──────────────
 MIN_WIDTH = 3600
 MIN_HEIGHT = 4800
 MIN_CONTRAST = 35       # avg channel stddev — below this the design is too flat
 TARGET_DPI = 300
+DEFAULT_MIN_PHRASE_VISIBILITY = 0.90
 
 
 def inspect_design(filepath):
@@ -150,9 +151,56 @@ def _find_default_font():
     return None
 
 
+def _foreground_mask_for_overlap(img):
+    """Return an L mask where 255 marks likely foreground graphics."""
+    rgba = img.convert("RGBA")
+    rgb = rgba.convert("RGB")
+    r, g, b = rgb.split()
+
+    # Most renders use bright magenta chroma background before removal.
+    magenta_r = r.point(lambda v: 255 if v >= 220 else 0)
+    magenta_g = g.point(lambda v: 255 if v <= 95 else 0)
+    magenta_b = b.point(lambda v: 255 if v >= 220 else 0)
+    magenta_mask = ImageChops.multiply(ImageChops.multiply(magenta_r, magenta_g), magenta_b)
+    non_magenta = ImageChops.invert(magenta_mask)
+
+    alpha = rgba.split()[3]
+    solid_alpha = alpha.point(lambda v: 255 if v > 20 else 0)
+    return ImageChops.multiply(non_magenta, solid_alpha)
+
+
+def _bbox_overlap_ratio(mask_l, bbox):
+    x1, y1, x2, y2 = bbox
+    x1 = max(0, min(MIN_WIDTH - 1, x1))
+    y1 = max(0, min(MIN_HEIGHT - 1, y1))
+    x2 = max(x1 + 1, min(MIN_WIDTH, x2))
+    y2 = max(y1 + 1, min(MIN_HEIGHT, y2))
+    region = mask_l.crop((x1, y1, x2, y2))
+    stat = ImageStat.Stat(region)
+    return max(0.0, min(1.0, (stat.mean[0] / 255.0) if stat.mean else 0.0))
+
+
+def _candidate_positions(text_w, text_h):
+    margin_x = int(MIN_WIDTH * 0.06)
+    top_band = (int(MIN_HEIGHT * 0.05), int(MIN_HEIGHT * 0.32))
+    bottom_band = (int(MIN_HEIGHT * 0.68), int(MIN_HEIGHT * 0.95))
+
+    x = max(margin_x, min(MIN_WIDTH - text_w - margin_x, (MIN_WIDTH - text_w) // 2))
+
+    top_y = max(top_band[0], min(top_band[1] - text_h, (top_band[0] + top_band[1] - text_h) // 2))
+    bottom_y = max(bottom_band[0], min(bottom_band[1] - text_h, (bottom_band[0] + bottom_band[1] - text_h) // 2))
+
+    return [
+        ("top", x, top_y),
+        ("bottom", x, bottom_y),
+    ]
+
+
 def add_text_overlay(base_image_path, phrase, output_path,
                      font_path=None, font_size=None,
-                     text_color=None):
+                     text_color=None,
+                     min_visibility=DEFAULT_MIN_PHRASE_VISIBILITY,
+                     layout_mode="safe_zone"):
     """
     Composite a phrase over an AI-generated base image.
     Resizes to print resolution, auto-sizes text to fill the design area,
@@ -164,33 +212,82 @@ def add_text_overlay(base_image_path, phrase, output_path,
     # Resolve font
     resolved_font = font_path or _find_default_font()
 
-    # Auto-size: scale font to fill ~85% of image width
-    max_text_width = int(MIN_WIDTH * 0.85)
-    if font_size:
-        size = font_size
-    else:
-        # Start large and shrink until text fits — streetwear = bold and big
-        size = 600
-        while size > 40:
-            test_font = ImageFont.truetype(resolved_font, size) if resolved_font else ImageFont.load_default(size=size)
-            test_draw = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
-            bbox = test_draw.textbbox((0, 0), phrase, font=test_font)
-            if (bbox[2] - bbox[0]) <= max_text_width:
-                break
-            size -= 10
-
-    if resolved_font:
-        font = ImageFont.truetype(resolved_font, size)
-    else:
-        font = ImageFont.load_default(size=size)
-
-    # Calculate centered position
+    # Auto-size and placement: prefer safe top/bottom bands with minimal overlap.
+    max_text_width = int(MIN_WIDTH * 0.88)
+    start_size = font_size if font_size else 600
     draw = ImageDraw.Draw(img)
-    bbox = draw.textbbox((0, 0), phrase, font=font)
-    text_w = bbox[2] - bbox[0]
-    text_h = bbox[3] - bbox[1]
-    x = (MIN_WIDTH - text_w) // 2
-    y = (MIN_HEIGHT - text_h) // 2
+    fg_mask = _foreground_mask_for_overlap(img)
+
+    best = None
+    for size in range(start_size, 39, -10):
+        test_font = ImageFont.truetype(resolved_font, size) if resolved_font else ImageFont.load_default(size=size)
+        bbox = draw.textbbox((0, 0), phrase, font=test_font)
+        text_w = bbox[2] - bbox[0]
+        text_h = bbox[3] - bbox[1]
+
+        if text_w > max_text_width:
+            continue
+
+        if layout_mode == "safe_zone":
+            candidates = _candidate_positions(text_w, text_h)
+        else:
+            candidates = [
+                ("center", (MIN_WIDTH - text_w) // 2, (MIN_HEIGHT - text_h) // 2),
+            ]
+
+        local_best = None
+        for zone, x, y in candidates:
+            text_bbox = (x, y, x + text_w, y + text_h)
+            overlap = _bbox_overlap_ratio(fg_mask, text_bbox)
+            visibility = 1.0 - overlap
+            candidate = {
+                "font": test_font,
+                "size": size,
+                "x": x,
+                "y": y,
+                "text_w": text_w,
+                "text_h": text_h,
+                "zone": zone,
+                "overlap": overlap,
+                "visibility": visibility,
+            }
+            if local_best is None or candidate["visibility"] > local_best["visibility"]:
+                local_best = candidate
+
+        if local_best is None:
+            continue
+
+        if best is None or local_best["visibility"] > best["visibility"]:
+            best = local_best
+
+        if local_best["visibility"] >= min_visibility:
+            best = local_best
+            break
+
+    if best is None:
+        # Fallback: original centered placement if everything else failed
+        fallback_size = max(40, min(start_size, 220))
+        font = ImageFont.truetype(resolved_font, fallback_size) if resolved_font else ImageFont.load_default(size=fallback_size)
+        bbox = draw.textbbox((0, 0), phrase, font=font)
+        text_w = bbox[2] - bbox[0]
+        text_h = bbox[3] - bbox[1]
+        best = {
+            "font": font,
+            "size": fallback_size,
+            "x": (MIN_WIDTH - text_w) // 2,
+            "y": (MIN_HEIGHT - text_h) // 2,
+            "text_w": text_w,
+            "text_h": text_h,
+            "zone": "center",
+            "visibility": 0.0,
+            "overlap": 1.0,
+        }
+
+    font = best["font"]
+    x = best["x"]
+    y = best["y"]
+    text_w = best["text_w"]
+    text_h = best["text_h"]
 
     # Auto-detect text color: sample background brightness at text center
     if text_color is None:
@@ -204,7 +301,7 @@ def add_text_overlay(base_image_path, phrase, output_path,
 
     # Shadow for contrast (offset 4px down-right)
     shadow_color = (0, 0, 0, 180) if text_color[0] > 128 else (255, 255, 255, 120)
-    shadow_offset = max(3, size // 50)
+    shadow_offset = max(3, best["size"] // 50)
     draw.text((x + shadow_offset, y + shadow_offset), phrase,
               font=font, fill=shadow_color)
 
@@ -212,7 +309,16 @@ def add_text_overlay(base_image_path, phrase, output_path,
     draw.text((x, y), phrase, font=font, fill=text_color)
 
     img.save(output_path, "PNG", dpi=(TARGET_DPI, TARGET_DPI))
-    print(f"  Text overlay saved: {output_path}")
+    print(
+        f"  Text overlay saved: {output_path} "
+        f"(zone={best['zone']}, visibility={best['visibility']:.2f})"
+    )
+    return {
+        "zone": best["zone"],
+        "visibility": best["visibility"],
+        "font_size": best["size"],
+        "overlap": best["overlap"],
+    }
 
 
 def trim_and_fill(filepath, target_w=4500, target_h=5400, padding_pct=0.05):

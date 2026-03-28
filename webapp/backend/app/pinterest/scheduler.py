@@ -130,8 +130,7 @@ async def post_next_pin() -> dict | None:
         conn.execute("UPDATE pins SET status=? WHERE id=?", (PinStatus.POSTING.value, pin_id))
         conn.commit()
 
-        # Upload and create pin
-        media_id = await pinterest_client.upload_media(job["image_path"])
+        # Create pin with inline image
         board_id = job["board_id"]
         if not board_id:
             raise ValueError("No board_id configured for this pin")
@@ -141,7 +140,7 @@ async def post_next_pin() -> dict | None:
             title=job["title"],
             description=job["description"],
             link=job["link"],
-            media_id=media_id,
+            image_path=job["image_path"],
         )
 
         # Success

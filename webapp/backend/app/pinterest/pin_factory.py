@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -28,6 +29,98 @@ ORANGE = "#E8500A"
 WHITE = "#FFFFFF"
 GRAY = "#888888"
 LIGHT = "#f5f5f0"
+
+
+def _load_design_metadata_index() -> dict[str, dict[str, str | None]]:
+    metadata: dict[str, dict[str, str | None]] = {}
+    for path in sorted((WORKSPACE_DIR / "logs").glob("front_*.json")):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        rows = payload if isinstance(payload, list) else [payload]
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            filename = row.get("filename")
+            if not filename:
+                continue
+            metadata[filename] = {
+                "style": row.get("style"),
+                "color_palette": row.get("color_palette"),
+            }
+    return metadata
+
+
+def _variant_label_from_palette(palette: str | None) -> str | None:
+    if not palette:
+        return None
+    descriptor = palette.split(",", 1)[1].strip() if "," in palette else palette.strip()
+    descriptor = re.sub(r"\b(aesthetic|finish|warmth|look)\b", "", descriptor, flags=re.IGNORECASE)
+    descriptor = re.sub(r"\s+", " ", descriptor).strip()
+    if not descriptor:
+        return None
+    return " ".join(descriptor.split()[:3]).title()
+
+
+def _variant_label_from_style(style: str | None) -> str | None:
+    if not style:
+        return None
+    normalized = style.replace("+", " ")
+    normalized = re.sub(r"\b(text|graphic|letters|lettering|typography|layout)\b", "", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"[^a-zA-Z0-9 ]+", " ", normalized)
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    if not normalized:
+        return None
+    return " ".join(normalized.split()[:3]).title()
+
+
+def _number_to_edition_word(value: int) -> str:
+    words = {
+        0: "Zero",
+        1: "One",
+        2: "Two",
+        3: "Three",
+        4: "Four",
+        5: "Five",
+        6: "Six",
+        7: "Seven",
+        8: "Eight",
+        9: "Nine",
+        10: "Ten",
+        11: "Eleven",
+        12: "Twelve",
+        13: "Thirteen",
+        14: "Fourteen",
+        15: "Fifteen",
+        16: "Sixteen",
+        17: "Seventeen",
+        18: "Eighteen",
+        19: "Nineteen",
+        20: "Twenty",
+    }
+    return words.get(value, str(value))
+
+
+def _display_name_from_filename(filename: str) -> str:
+    stem = Path(filename).stem
+    base_stem = re.sub(r"_\d+$", "", stem)
+    base_name = base_stem.replace("_", " ").title()
+
+    matches = list(APPROVED_DIR.glob(f"{base_stem}_*.png"))
+    if len(matches) <= 1:
+        return base_name
+
+    metadata = _load_design_metadata_index().get(Path(filename).name, {})
+    variant_label = _variant_label_from_palette(metadata.get("color_palette"))
+    if not variant_label:
+        variant_label = _variant_label_from_style(metadata.get("style"))
+    if not variant_label:
+        suffix_match = re.search(r"_(\d+)$", stem)
+        if suffix_match:
+            variant_label = f"Edition {_number_to_edition_word(int(suffix_match.group(1)))}"
+
+    return f"{base_name} {variant_label}" if variant_label else base_name
 
 
 def _hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
@@ -171,7 +264,7 @@ def generate_pins_for_design(
         keywords = select_keywords(tmpl.get("keyword_categories", []), count=5)
         primary_kw = keywords[0] if keywords else "sneaker culture"
 
-        design_name = design_filename.replace(".png", "").replace("_", " ").title()
+        design_name = _display_name_from_filename(design_filename)
         title = build_pin_title(design_name, primary_kw)
         description = build_pin_description(design_name, keywords, tmpl.get("cta", "Shop now"))
 

@@ -8,7 +8,7 @@ import httpx
 from .models import get_conn
 
 PINTEREST_API = "https://api.pinterest.com/v5"
-REDIRECT_URI = "http://localhost:8000/api/pinterest/setup/callback"
+REDIRECT_URI = "http://localhost:8000/callback/"
 OAUTH_SCOPES = "boards:read,boards:write,pins:read,pins:write,user_accounts:read"
 
 CREDENTIAL_KEYS = [
